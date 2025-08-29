@@ -1,0 +1,23 @@
+services:
+  db:
+    image: postgres:16
+    restart: always
+    ports:
+      - 5432:5432
+    environment:
+      POSTGRES_USER: gaastat
+      POSTGRES_PASSWORD: password1
+      POSTGRES_DB: gaastat-dev
+    volumes:
+      - db:/var/lib/postgresql/data
+
+  flyway:
+    image: flyway/flyway:10-alpine
+    command: -url=jdbc:postgresql://db/gaastat-dev -schemas=public -user=gaastat -password=password1 -outOfOrder=true -connectRetries=10 migrate
+    volumes:
+      - ./database:/flyway/sql
+    depends_on:
+      - db
+
+volumes:
+  db:
