@@ -14,6 +14,7 @@ TestResults/
 Version.cs
 Version.h
 Version.cpp
+.nuget-packages/
 
 # Node.js / React
 node_modules/

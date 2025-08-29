@@ -5,12 +5,18 @@ namespace GAAStat.Dal.Interfaces;
 
 public interface IGAAStatDbContext
 {
-    DbSet<User> Users { get; set; }
-    DbSet<Team> Teams { get; set; }
-    DbSet<Player> Players { get; set; }
+    DbSet<Competition> Competitions { get; set; }
+    DbSet<EventOutcome> EventOutcomes { get; set; }
+    DbSet<EventType> EventTypes { get; set; }
+    DbSet<ImportHistory> ImportHistories { get; set; }
+    DbSet<ImportSnapshot> ImportSnapshots { get; set; }
     DbSet<Match> Matches { get; set; }
-    DbSet<PlayerStat> PlayerStats { get; set; }
-
+    DbSet<MatchKickoutStat> MatchKickoutStats { get; set; }
+    DbSet<MatchPlayerStat> MatchPlayerStats { get; set; }
+    DbSet<MatchSourceAnalysis> MatchSourceAnalyses { get; set; }
+    DbSet<Season> Seasons { get; set; }
+    DbSet<Team> Teams { get; set; }
+    
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
     int SaveChanges();
 }
