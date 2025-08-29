@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "context7": {
+      "command": "npx",
+      "args": [
+        "@context-labs/mcp-server-context7"
+      ]
+    }
+  }
+}
