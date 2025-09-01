@@ -18,6 +18,7 @@ public class ExcelImportService : IExcelImportService
     private readonly IGAAStatDbContext _context;
     private readonly IStatisticsCalculationService _statisticsService;
     private readonly IImportSnapshotService _snapshotService;
+    private readonly IBulkOperationsService _bulkOperationsService;
     private readonly ILogger<ExcelImportService> _logger;
 
     // Sheet name patterns for identification
@@ -28,11 +29,13 @@ public class ExcelImportService : IExcelImportService
         IGAAStatDbContext context,
         IStatisticsCalculationService statisticsService,
         IImportSnapshotService snapshotService,
+        IBulkOperationsService bulkOperationsService,
         ILogger<ExcelImportService> logger)
     {
         _context = context;
         _statisticsService = statisticsService;
         _snapshotService = snapshotService;
+        _bulkOperationsService = bulkOperationsService;
         _logger = logger;
         
         // Set EPPlus license context
@@ -821,7 +824,7 @@ public class ExcelImportService : IExcelImportService
             summary.MatchesImported++;
         }
 
-        // Import player statistics using small batch processing
+        // Import player statistics using high-performance bulk operations
         var playerStatsList = new List<MatchPlayerStat>();
         foreach (var playerData in excelData.PlayerStatistics)
         {
@@ -833,17 +836,30 @@ public class ExcelImportService : IExcelImportService
             }
         }
         
-        // Process player statistics in small batches to avoid massive parameterized queries
+        // Use bulk operations service for high-performance insertion
         if (playerStatsList.Any())
         {
-            const int batchSize = 50; // Smaller batch size to prevent query timeout
-            for (int i = 0; i < playerStatsList.Count; i += batchSize)
+            var bulkConfig = new BulkOperationConfig
             {
-                var batch = playerStatsList.Skip(i).Take(batchSize).ToList();
-                _context.MatchPlayerStats.AddRange(batch);
-                await _context.SaveChangesAsync(); // Save each batch separately
-                _logger.LogInformation("Processed player statistics batch {BatchNumber}: {BatchSize} records", 
-                    (i / batchSize) + 1, batch.Count);
+                BatchSize = 20, // Optimal batch size for complex models
+                EnableBulkInsert = true,
+                CommandTimeout = TimeSpan.FromMinutes(2),
+                EnableParallelProcessing = false // Keep sequential for data integrity
+            };
+
+            var bulkResult = await _bulkOperationsService.BulkInsertPlayerStatsAsync(playerStatsList, bulkConfig);
+            
+            if (bulkResult.IsSuccess)
+            {
+                _logger.LogInformation("Bulk inserted {RecordCount} player statistics in {Duration:F2}s at {Rate:F1} records/sec", 
+                    bulkResult.Data.RecordsInserted, 
+                    bulkResult.Data.OperationDuration.TotalSeconds, 
+                    bulkResult.Data.RecordsPerSecond);
+            }
+            else
+            {
+                _logger.LogError("Bulk insert failed: {ErrorMessage}", bulkResult.ErrorMessage);
+                throw new InvalidOperationException($"Player statistics bulk insert failed: {bulkResult.ErrorMessage}");
             }
         }
 

@@ -126,12 +126,12 @@ public class StatisticsCalculationService : IStatisticsCalculationService
             TeamTotalPsr = totalPsr,
             TotalPossessions = totalPossessions,
             TotalEvents = totalEvents,
-            PossessionRetentionRate = totalPossessions > 0 ? ((totalPossessions - totalTurnovers) / (decimal)totalPossessions) * 100 : 0,
-            ScoringEfficiency = totalAttempts > 0 ? (totalScores / (decimal)totalAttempts) * 100 : 0,
+            PossessionRetentionRate = totalPossessions > 0 ? (totalPossessions - totalTurnovers) / (decimal)totalPossessions : 0, // 0-1 range
+            ScoringEfficiency = totalAttempts > 0 ? totalScores / (decimal)totalAttempts : 0, // 0-1 range
             TotalScores = totalScores,
             TotalAttempts = totalAttempts,
             TotalTurnovers = totalTurnovers,
-            TurnoverRate = totalPossessions > 0 ? (totalTurnovers / (decimal)totalPossessions) * 100 : 0
+            TurnoverRate = totalPossessions > 0 ? totalTurnovers / (decimal)totalPossessions : 0 // 0-1 range
         };
     }
 
@@ -232,7 +232,7 @@ public class StatisticsCalculationService : IStatisticsCalculationService
         var totalAttempts = stats.TotalAttempts ?? 0;
         
         if (totalAttempts == 0) return null;
-        return (totalScores / (decimal)totalAttempts) * 100;
+        return totalScores / (decimal)totalAttempts; // Return as 0-1 range for database constraint
     }
 
     private decimal? CalculateScoreConversionRate(PlayerStatisticsRow stats)
@@ -241,7 +241,7 @@ public class StatisticsCalculationService : IStatisticsCalculationService
         var totalShots = totalScores + (stats.ShotsWide ?? 0) + (stats.ShotsSaved ?? 0) + (stats.ShotsShort ?? 0);
         
         if (totalShots == 0) return null;
-        return (totalScores / (decimal)totalShots) * 100;
+        return totalScores / (decimal)totalShots; // Return as 0-1 range for database constraint
     }
 
     private decimal? CalculateTackleSuccessRate(PlayerStatisticsRow stats)
@@ -250,7 +250,7 @@ public class StatisticsCalculationService : IStatisticsCalculationService
         var totalTackles = successfulTackles + (stats.Turnovers ?? 0);
         
         if (totalTackles == 0) return null;
-        return (successfulTackles / (decimal)totalTackles) * 100;
+        return successfulTackles / (decimal)totalTackles; // Return as 0-1 range for database constraint
     }
 
     private decimal? CalculatePassCompletionRate(PlayerStatisticsRow stats)
@@ -262,7 +262,7 @@ public class StatisticsCalculationService : IStatisticsCalculationService
         var errors = stats.HandlingErrors ?? 0;
         var successfulPasses = Math.Max(0, totalPasses - errors);
         
-        return (successfulPasses / (decimal)totalPasses) * 100;
+        return successfulPasses / (decimal)totalPasses; // Return as 0-1 range for database constraint
     }
 
     private decimal? CalculatePossessionRetentionRate(PlayerStatisticsRow stats)
@@ -271,7 +271,7 @@ public class StatisticsCalculationService : IStatisticsCalculationService
         var possessionsLost = stats.TotalPossessionsLost ?? 0;
         
         if (totalPossessions == 0) return null;
-        return ((totalPossessions - possessionsLost) / (decimal)totalPossessions) * 100;
+        return (totalPossessions - possessionsLost) / (decimal)totalPossessions; // Return as 0-1 range for database constraint
     }
 
     private decimal? CalculateDefensiveEfficiency(PlayerStatisticsRow stats)
@@ -280,7 +280,7 @@ public class StatisticsCalculationService : IStatisticsCalculationService
         var defensiveEvents = defensiveActions + (stats.Turnovers ?? 0);
         
         if (defensiveEvents == 0) return null;
-        return (defensiveActions / (decimal)defensiveEvents) * 100;
+        return defensiveActions / (decimal)defensiveEvents; // Return as 0-1 range for database constraint
     }
 
     private decimal? CalculateAttackingEfficiency(PlayerStatisticsRow stats)
@@ -289,7 +289,7 @@ public class StatisticsCalculationService : IStatisticsCalculationService
         var attempts = stats.TotalAttempts ?? 0;
         
         if (attempts == 0) return null;
-        return (scores / (decimal)attempts) * 100;
+        return scores / (decimal)attempts; // Return as 0-1 range for database constraint
     }
 
     private decimal CalculateOverallRating(decimal psr, PlayerStatisticsRow stats)

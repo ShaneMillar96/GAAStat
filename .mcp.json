@@ -1,2 +1,11 @@
 {
+  "mcpServers": {
+    "@databases/postgresql": {
+      "command": "npx",
+      "args": ["@databases/mcp-postgresql"],
+      "env": {
+        "DATABASE_URL": "postgresql://gaastat:password1@localhost:5432/gaastat-dev"
+      }
+    }
+  }
 }
