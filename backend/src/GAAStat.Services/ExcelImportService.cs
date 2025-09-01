@@ -21,9 +21,9 @@ public class ExcelImportService : IExcelImportService
     private readonly IBulkOperationsService _bulkOperationsService;
     private readonly ILogger<ExcelImportService> _logger;
 
-    // Sheet name patterns for identification
-    private static readonly Regex MatchSheetPattern = new(@"^\d{2}\.\s+\w+\s+vs\s+.+\s+\d{2}\.\d{2}\.\d{2,4}$", RegexOptions.Compiled);
+    // Sheet name patterns for identification - Updated for GAA Drum Analysis 2025.xlsx format
     private static readonly Regex PlayerStatsSheetPattern = new(@"^\d{2}\.\s+Player\s+(S|s)tats?\s+vs\s+.+", RegexOptions.Compiled);
+    private static readonly Regex MatchSheetPattern = new(@"^\d{2}\.\s+(Championship|League|Neal Carlin|Drum)\s+.*vs\s+.+(?<!Player\s+(S|s)tats?\s+vs\s+.+)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     public ExcelImportService(
         IGAAStatDbContext context,
@@ -363,11 +363,13 @@ public class ExcelImportService : IExcelImportService
 
     private SheetType DetermineSheetType(string sheetName)
     {
-        if (MatchSheetPattern.IsMatch(sheetName))
-            return SheetType.MatchStatistics;
-        
+        // Check for Player Stats sheets first (more specific pattern)
         if (PlayerStatsSheetPattern.IsMatch(sheetName))
             return SheetType.PlayerStatistics;
+        
+        // Then check for match sheets - simplified pattern for GAA format
+        if (Regex.IsMatch(sheetName, @"^\d{2}\.\s+(Championship|League|Neal Carlin|Drum)\s+.*vs\s+", RegexOptions.IgnoreCase))
+            return SheetType.MatchStatistics;
 
         if (sheetName.Contains("Blank"))
             return SheetType.BlankMatchTemplate;
@@ -696,6 +698,18 @@ public class ExcelImportService : IExcelImportService
                 // Remove date from away team name
                 awayTeamAndDate = awayTeamAndDate.Replace(datePart, "").Trim();
             }
+            else if (TryGetDateFromMatchNumber(sheetName, out var mappedDate))
+            {
+                // Fallback to match number mapping for truncated sheet names
+                matchDate = mappedDate;
+                _logger.LogDebug("Used date mapping fallback for sheet {SheetName}: {Date}", 
+                    sheetName, matchDate.ToString("yyyy-MM-dd"));
+            }
+            else
+            {
+                // Log warning when no date can be determined
+                _logger.LogWarning("Could not extract or map date for sheet {SheetName}, using today's date", sheetName);
+            }
 
             _logger.LogDebug("Parsed sheet name '{SheetName}' -> Match: {MatchNumber}, Competition: '{Competition}', HomeTeam: '{HomeTeam}', AwayTeam: '{AwayTeam}'", 
                 sheetName, matchNumber, competition, homeTeam, awayTeamAndDate);
@@ -735,6 +749,48 @@ public class ExcelImportService : IExcelImportService
             }
         }
 
+        return false;
+    }
+
+    private bool TryGetDateFromMatchNumber(string sheetName, out DateTime date)
+    {
+        date = DateTime.Today;
+        
+        // Extract match number from sheet name (e.g., "01.", "02.", etc.)
+        var matchNumberMatch = Regex.Match(sheetName, @"^(\d{2})\.");
+        if (!matchNumberMatch.Success)
+            return false;
+        
+        var matchNumber = matchNumberMatch.Groups[1].Value;
+        
+        // Date mapping based on match chronology and visible dates in Excel
+        // Dates are in 2025 season based on filename
+        var dateMappings = new Dictionary<string, string>
+        {
+            { "01", "04.05.25" }, // Neal Carlin Cup vs Magilligan - early May
+            { "02", "31.05.25" }, // League vs Glack - visible in sheet name
+            { "03", "15.06.25" }, // League vs Moneymore - mid June (truncated shows "15.06.2")
+            { "04", "21.06.25" }, // League vs Sean Dolans - late June (truncated shows "21.06")
+            { "05", "10.07.25" }, // League vs Doire Trasna - July (truncated shows "10.0")
+            { "06", "27.07.25" }, // League vs Doire Colmcille - late July (truncated shows "2")
+            { "07", "03.08.25" }, // Drum vs Lissan - visible in sheet name
+            { "08", "17.08.25" }  // Championship vs Magilligan - mid August (user mentioned this pattern)
+        };
+        
+        if (dateMappings.TryGetValue(matchNumber, out var dateString))
+        {
+            if (DateTime.TryParseExact(dateString, "dd.MM.yy", CultureInfo.InvariantCulture, DateTimeStyles.None, out date))
+            {
+                // Handle 2-digit year - add 2000
+                if (date.Year < 100)
+                    date = date.AddYears(2000);
+                
+                _logger.LogDebug("Mapped match number {MatchNumber} to date {Date} for sheet {SheetName}", 
+                    matchNumber, date.ToString("yyyy-MM-dd"), sheetName);
+                return true;
+            }
+        }
+        
         return false;
     }
 
@@ -1033,36 +1089,116 @@ public class ExcelImportService : IExcelImportService
         // Determine team (simplified - could be enhanced with better logic)
         var teamId = teamCache.Values.FirstOrDefault()?.Id ?? 1;
 
+        // Calculate derived statistics
+        var totalShots = (playerData.Points ?? 0) + (playerData.Goals ?? 0) + (playerData.ShotsWide ?? 0) + 
+                        (playerData.ShotsSaved ?? 0) + (playerData.ShotsShort ?? 0);
+        var totalPasses = (playerData.KickPasses ?? 0) + (playerData.HandPasses ?? 0);
+        var totalTackles = (playerData.SuccessfulTackles ?? 0) + (playerData.Turnovers ?? 0); // Assuming turnovers are missed tackles
+
         return new MatchPlayerStat
         {
+            // Core information
             MatchId = matchId,
             PlayerName = playerData.PlayerName,
             JerseyNumber = playerData.JerseyNumber,
             TeamId = teamId,
             MinutesPlayed = playerData.MinutesPlayed,
+
+            // Performance metrics
             TotalEvents = playerData.TotalEvents,
             PerformanceSuccessRate = psr,
             TotalPossessions = playerData.TotalPossessions,
+
+            // Possession and ball handling
             TurnoversWon = playerData.TurnoversWon,
             Interceptions = playerData.Interceptions,
             PossessionsLost = playerData.TotalPossessionsLost,
+            
+            // Passing statistics
             KickPasses = playerData.KickPasses,
             HandPasses = playerData.HandPasses,
+            KickPassSuccessRate = CalculateSuccessRate(playerData.KickPasses, totalPasses),
+            HandPassSuccessRate = CalculateSuccessRate(playerData.HandPasses, totalPasses),
+            
+            // Defensive actions
             TacklesMade = playerData.SuccessfulTackles,
+            TacklesMissed = playerData.Turnovers, // Assuming turnovers represent missed tackles
+            TackleSuccessRate = CalculateSuccessRate(playerData.SuccessfulTackles, totalTackles),
+            DefensiveActions = (playerData.SuccessfulTackles ?? 0) + (playerData.Interceptions ?? 0) + (playerData.TurnoversWon ?? 0),
+
+            // Disciplinary
+            FreesWon = playerData.Fouls, // Map fouls to frees won
+            FreesConceded = null, // Not available in current Excel structure
             CardsYellow = playerData.YellowCards,
             CardsBlack = playerData.BlackCards,
             CardsRed = playerData.RedCards,
+
+            // Scoring from play
             PointsFromPlay = playerData.Points,
             GoalsFromPlay = playerData.Goals,
             TwoPointersFromPlay = playerData.TwoPointers,
             ShotsWide = playerData.ShotsWide,
             ShotsSaved = playerData.ShotsSaved,
             ShotsShort = playerData.ShotsShort,
+            ShotsBlocked = null, // Not available in current Excel
+            ShotsWoodwork = null, // Not available in current Excel
+
+            // Scoring from frees (using FreesTotals data)
+            PointsFromFrees = null, // Would need to be parsed from Scores field
+            GoalsFromFrees = null, // Would need to be parsed from Scores field
+            FreesWide = playerData.Wides,
+            FreesSaved = null, // Not available in current Excel
+            FreesShort = null, // Not available in current Excel
+
+            // Score assists (not available in current Excel structure)
+            ScoreAssistsPoints = null,
+            ScoreAssistsGoals = null,
+
+            // Advanced metrics
             ShotEfficiency = metrics.ShotEfficiency,
             ScoreConversionRate = metrics.ScoreConversionRate,
+            AttackingPlays = totalShots, // Total scoring attempts as attacking plays
+            PossessionWonPercentage = CalculatePercentage(playerData.TurnoversWon, playerData.TotalPossessions),
+            DistributionAccuracy = CalculateSuccessRate(totalPasses, playerData.TotalEvents),
+
+            // Ground game and catching (not directly available, using proxies)
+            GroundBallWins = playerData.TurnoversWon, // Proxy for ground ball wins
+            AerialContestsWon = playerData.KickoutWins, // Proxy from kickout wins
+            CleanCatches = playerData.WinCategories, // Proxy from win categories
+            Fumbles = playerData.HandlingErrors,
+
+            // Performance ratings
             OverallPerformanceRating = metrics.OverallRating,
+            AttackingRating = null, // Will be calculated separately
+            DefensiveRating = null, // Will be calculated separately
+            PassingRating = null, // Will be calculated separately
+
+            // Position and match context (not available in current Excel)
+            StartingPosition = null, // Would need position analysis
+            SubstitutedOnMinute = null, // Not tracked in current Excel
+            SubstitutedOffMinute = null, // Not tracked in current Excel
+            Captain = false, // Default to false
+
             ImportedAt = importedAt
         };
+    }
+
+    /// <summary>
+    /// Calculate success rate as decimal (0.0 to 1.0)
+    /// </summary>
+    private decimal? CalculateSuccessRate(int? successful, int? total)
+    {
+        if (total == null || total == 0 || successful == null) return null;
+        return (decimal)successful / (decimal)total;
+    }
+
+    /// <summary>
+    /// Calculate percentage as decimal (0.0 to 1.0)
+    /// </summary>
+    private decimal? CalculatePercentage(int? numerator, int? denominator)
+    {
+        if (denominator == null || denominator == 0 || numerator == null) return null;
+        return (decimal)numerator / (decimal)denominator;
     }
 
     private bool TryGetMatchIdForPlayerSheet(string playerSheetName, Dictionary<string, int> matchIdMap, out int matchId)
