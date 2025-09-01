@@ -1,0 +1,628 @@
+{
+  "sheet_analyzed": "08. Player stats vs Magilligan ",
+  "total_columns": 85,
+  "column_mapping": [
+    {
+      "excel_column": "A",
+      "column_index": 0,
+      "header": "#",
+      "category": "",
+      "super_category": ""
+    },
+    {
+      "excel_column": "B",
+      "column_index": 1,
+      "header": "Player Name",
+      "category": "Drum",
+      "super_category": ""
+    },
+    {
+      "excel_column": "C",
+      "column_index": 2,
+      "header": "Min",
+      "category": "Summary",
+      "super_category": ""
+    },
+    {
+      "excel_column": "D",
+      "column_index": 3,
+      "header": "TE",
+      "category": "",
+      "super_category": ""
+    },
+    {
+      "excel_column": "E",
+      "column_index": 4,
+      "header": "TE/PSR",
+      "category": "",
+      "super_category": ""
+    },
+    {
+      "excel_column": "F",
+      "column_index": 5,
+      "header": "Scores",
+      "category": "",
+      "super_category": ""
+    },
+    {
+      "excel_column": "G",
+      "column_index": 6,
+      "header": "PSR",
+      "category": "",
+      "super_category": ""
+    },
+    {
+      "excel_column": "H",
+      "column_index": 7,
+      "header": "PSR/TP",
+      "category": "",
+      "super_category": ""
+    },
+    {
+      "excel_column": "I",
+      "column_index": 8,
+      "header": "TP",
+      "category": "Possession Play",
+      "super_category": "1"
+    },
+    {
+      "excel_column": "J",
+      "column_index": 9,
+      "header": "ToW",
+      "category": "",
+      "super_category": "2"
+    },
+    {
+      "excel_column": "K",
+      "column_index": 10,
+      "header": "Int",
+      "category": "",
+      "super_category": "2"
+    },
+    {
+      "excel_column": "L",
+      "column_index": 11,
+      "header": "TPL",
+      "category": "",
+      "super_category": ""
+    },
+    {
+      "excel_column": "M",
+      "column_index": 12,
+      "header": "KP",
+      "category": "",
+      "super_category": "-1"
+    },
+    {
+      "excel_column": "N",
+      "column_index": 13,
+      "header": "HP",
+      "category": "",
+      "super_category": "-1"
+    },
+    {
+      "excel_column": "O",
+      "column_index": 14,
+      "header": "Ha",
+      "category": "",
+      "super_category": "-1"
+    },
+    {
+      "excel_column": "P",
+      "column_index": 15,
+      "header": "TO",
+      "category": "",
+      "super_category": "-1"
+    },
+    {
+      "excel_column": "Q",
+      "column_index": 16,
+      "header": "In",
+      "category": "",
+      "super_category": "-1"
+    },
+    {
+      "excel_column": "R",
+      "column_index": 17,
+      "header": "SS",
+      "category": "",
+      "super_category": "-1"
+    },
+    {
+      "excel_column": "S",
+      "column_index": 18,
+      "header": "S Save",
+      "category": "",
+      "super_category": ""
+    },
+    {
+      "excel_column": "T",
+      "column_index": 19,
+      "header": "Fo",
+      "category": "",
+      "super_category": "-2"
+    },
+    {
+      "excel_column": "U",
+      "column_index": 20,
+      "header": "Ww",
+      "category": "",
+      "super_category": ""
+    },
+    {
+      "excel_column": "V",
+      "column_index": 21,
+      "header": "KoW",
+      "category": "Kickout Analysis",
+      "super_category": ""
+    },
+    {
+      "excel_column": "W",
+      "column_index": 22,
+      "header": "WC",
+      "category": "",
+      "super_category": "1"
+    },
+    {
+      "excel_column": "X",
+      "column_index": 23,
+      "header": "BW",
+      "category": "",
+      "super_category": "1"
+    },
+    {
+      "excel_column": "Y",
+      "column_index": 24,
+      "header": "SW",
+      "category": "",
+      "super_category": "1"
+    },
+    {
+      "excel_column": "Z",
+      "column_index": 25,
+      "header": "KoW",
+      "category": "Opp Kickout Analysis",
+      "super_category": ""
+    },
+    {
+      "excel_column": "AA",
+      "column_index": 26,
+      "header": "WC",
+      "category": "",
+      "super_category": "1"
+    },
+    {
+      "excel_column": "AB",
+      "column_index": 27,
+      "header": "BW",
+      "category": "",
+      "super_category": "1"
+    },
+    {
+      "excel_column": "AC",
+      "column_index": 28,
+      "header": "SW",
+      "category": "",
+      "super_category": "1"
+    },
+    {
+      "excel_column": "AD",
+      "column_index": 29,
+      "header": "TA",
+      "category": "Attacking Play",
+      "super_category": ""
+    },
+    {
+      "excel_column": "AE",
+      "column_index": 30,
+      "header": "KR",
+      "category": "",
+      "super_category": "1"
+    },
+    {
+      "excel_column": "AF",
+      "column_index": 31,
+      "header": "KL",
+      "category": "",
+      "super_category": ""
+    },
+    {
+      "excel_column": "AG",
+      "column_index": 32,
+      "header": "CR",
+      "category": "",
+      "super_category": "1"
+    },
+    {
+      "excel_column": "AH",
+      "column_index": 33,
+      "header": "CL",
+      "category": "",
+      "super_category": ""
+    },
+    {
+      "excel_column": "AI",
+      "column_index": 34,
+      "header": "Tot",
+      "category": "Shots from Play",
+      "super_category": ""
+    },
+    {
+      "excel_column": "AJ",
+      "column_index": 35,
+      "header": "Pts",
+      "category": "",
+      "super_category": "1"
+    },
+    {
+      "excel_column": "AK",
+      "column_index": 36,
+      "header": "2 Pts",
+      "category": "",
+      "super_category": "2"
+    },
+    {
+      "excel_column": "AL",
+      "column_index": 37,
+      "header": "Gls",
+      "category": "",
+      "super_category": "3"
+    },
+    {
+      "excel_column": "AM",
+      "column_index": 38,
+      "header": "Wid",
+      "category": "",
+      "super_category": ""
+    },
+    {
+      "excel_column": "AN",
+      "column_index": 39,
+      "header": "Sh",
+      "category": "",
+      "super_category": "-1"
+    },
+    {
+      "excel_column": "AO",
+      "column_index": 40,
+      "header": "Save",
+      "category": "",
+      "super_category": ""
+    },
+    {
+      "excel_column": "AP",
+      "column_index": 41,
+      "header": "Ww",
+      "category": "",
+      "super_category": ""
+    },
+    {
+      "excel_column": "AQ",
+      "column_index": 42,
+      "header": "Bd",
+      "category": "",
+      "super_category": ""
+    },
+    {
+      "excel_column": "AR",
+      "column_index": 43,
+      "header": "45.0",
+      "category": "",
+      "super_category": ""
+    },
+    {
+      "excel_column": "AS",
+      "column_index": 44,
+      "header": "%",
+      "category": "",
+      "super_category": ""
+    },
+    {
+      "excel_column": "AT",
+      "column_index": 45,
+      "header": "Tot",
+      "category": "Scoreable Free",
+      "super_category": ""
+    },
+    {
+      "excel_column": "AU",
+      "column_index": 46,
+      "header": "Pts",
+      "category": "",
+      "super_category": "1"
+    },
+    {
+      "excel_column": "AV",
+      "column_index": 47,
+      "header": "2 Pts",
+      "category": "",
+      "super_category": "2"
+    },
+    {
+      "excel_column": "AW",
+      "column_index": 48,
+      "header": "Gls",
+      "category": "",
+      "super_category": "3"
+    },
+    {
+      "excel_column": "AX",
+      "column_index": 49,
+      "header": "Wid",
+      "category": "",
+      "super_category": ""
+    },
+    {
+      "excel_column": "AY",
+      "column_index": 50,
+      "header": "Sh",
+      "category": "",
+      "super_category": "-1"
+    },
+    {
+      "excel_column": "AZ",
+      "column_index": 51,
+      "header": "Save",
+      "category": "",
+      "super_category": ""
+    },
+    {
+      "excel_column": "BA",
+      "column_index": 52,
+      "header": "Ww",
+      "category": "",
+      "super_category": ""
+    },
+    {
+      "excel_column": "BB",
+      "column_index": 53,
+      "header": "Bd",
+      "category": "",
+      "super_category": ""
+    },
+    {
+      "excel_column": "BC",
+      "column_index": 54,
+      "header": "45.0",
+      "category": "",
+      "super_category": ""
+    },
+    {
+      "excel_column": "BD",
+      "column_index": 55,
+      "header": "QF",
+      "category": "",
+      "super_category": ""
+    },
+    {
+      "excel_column": "BE",
+      "column_index": 56,
+      "header": "%",
+      "category": "",
+      "super_category": ""
+    },
+    {
+      "excel_column": "BF",
+      "column_index": 57,
+      "header": "TS",
+      "category": "Total Shots",
+      "super_category": ""
+    },
+    {
+      "excel_column": "BG",
+      "column_index": 58,
+      "header": "%",
+      "category": "",
+      "super_category": ""
+    },
+    {
+      "excel_column": "BH",
+      "column_index": 59,
+      "header": "TA",
+      "category": "Assists",
+      "super_category": ""
+    },
+    {
+      "excel_column": "BI",
+      "column_index": 60,
+      "header": "Point",
+      "category": "",
+      "super_category": "1"
+    },
+    {
+      "excel_column": "BJ",
+      "column_index": 61,
+      "header": "Goal",
+      "category": "",
+      "super_category": "2"
+    },
+    {
+      "excel_column": "BK",
+      "column_index": 62,
+      "header": "Tot",
+      "category": "Tackle",
+      "super_category": ""
+    },
+    {
+      "excel_column": "BL",
+      "column_index": 63,
+      "header": "Con",
+      "category": "",
+      "super_category": "1"
+    },
+    {
+      "excel_column": "BM",
+      "column_index": 64,
+      "header": "Mis",
+      "category": "",
+      "super_category": "-1"
+    },
+    {
+      "excel_column": "BN",
+      "column_index": 65,
+      "header": "%",
+      "category": "",
+      "super_category": ""
+    },
+    {
+      "excel_column": "BO",
+      "column_index": 66,
+      "header": "Tot",
+      "category": "Frees Conceded",
+      "super_category": ""
+    },
+    {
+      "excel_column": "BP",
+      "column_index": 67,
+      "header": "Att",
+      "category": "",
+      "super_category": ""
+    },
+    {
+      "excel_column": "BQ",
+      "column_index": 68,
+      "header": "Mid",
+      "category": "",
+      "super_category": ""
+    },
+    {
+      "excel_column": "BR",
+      "column_index": 69,
+      "header": "Def",
+      "category": "",
+      "super_category": "-1"
+    },
+    {
+      "excel_column": "BS",
+      "column_index": 70,
+      "header": "Pen",
+      "category": "",
+      "super_category": "-2"
+    },
+    {
+      "excel_column": "BT",
+      "column_index": 71,
+      "header": "Tot",
+      "category": "50m Free conceded",
+      "super_category": ""
+    },
+    {
+      "excel_column": "BU",
+      "column_index": 72,
+      "header": "Delay",
+      "category": "",
+      "super_category": "-2"
+    },
+    {
+      "excel_column": "BV",
+      "column_index": 73,
+      "header": "Diss",
+      "category": "",
+      "super_category": "-2"
+    },
+    {
+      "excel_column": "BW",
+      "column_index": 74,
+      "header": "3v3",
+      "category": "",
+      "super_category": "-2"
+    },
+    {
+      "excel_column": "BX",
+      "column_index": 75,
+      "header": "Yel",
+      "category": "Bookings",
+      "super_category": "-1"
+    },
+    {
+      "excel_column": "BY",
+      "column_index": 76,
+      "header": "Bla",
+      "category": "",
+      "super_category": "-2"
+    },
+    {
+      "excel_column": "BZ",
+      "column_index": 77,
+      "header": "Red",
+      "category": "",
+      "super_category": "-3"
+    },
+    {
+      "excel_column": "CA",
+      "column_index": 78,
+      "header": "Won",
+      "category": "Throw Up",
+      "super_category": "1"
+    },
+    {
+      "excel_column": "CB",
+      "column_index": 79,
+      "header": "Los",
+      "category": "",
+      "super_category": "-1"
+    },
+    {
+      "excel_column": "CC",
+      "column_index": 80,
+      "header": "TKo",
+      "category": "Goalkeeper",
+      "super_category": ""
+    },
+    {
+      "excel_column": "CD",
+      "column_index": 81,
+      "header": "KoR",
+      "category": "",
+      "super_category": "1"
+    },
+    {
+      "excel_column": "CE",
+      "column_index": 82,
+      "header": "KoL",
+      "category": "",
+      "super_category": "-1"
+    },
+    {
+      "excel_column": "CF",
+      "column_index": 83,
+      "header": "%",
+      "category": "",
+      "super_category": ""
+    },
+    {
+      "excel_column": "CG",
+      "column_index": 84,
+      "header": "Saves",
+      "category": "",
+      "super_category": "5"
+    }
+  ],
+  "categories": {
+    "Uncategorized": 29,
+    "Drum": 1,
+    "Summary": 1,
+    "Possession Play": 1,
+    "2": 5,
+    "-1": 12,
+    "-2": 6,
+    "Kickout Analysis": 1,
+    "1": 13,
+    "Opp Kickout Analysis": 1,
+    "Attacking Play": 1,
+    "Shots from Play": 1,
+    "3": 2,
+    "Scoreable Free": 1,
+    "Total Shots": 1,
+    "Assists": 1,
+    "Tackle": 1,
+    "Frees Conceded": 1,
+    "50m Free conceded": 1,
+    "Bookings": 1,
+    "-3": 1,
+    "Throw Up": 1,
+    "Goalkeeper": 1,
+    "5": 1
+  },
+  "sample_data_rows": 19
+}

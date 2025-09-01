@@ -36,7 +36,7 @@ public class ImportSnapshotService : IImportSnapshotService
     public async Task<ServiceResult<int>> CreateSnapshotAsync(string description, bool compress = true)
     {
         var operationId = Guid.NewGuid().ToString()[..8];
-        var startTime = DateTime.UtcNow;
+        var startTime = DateTime.Now;
         
         try
         {
@@ -75,7 +75,7 @@ public class ImportSnapshotService : IImportSnapshotService
                 snapshot.CompressionRatio = 1m;
             }
 
-            var duration = DateTime.UtcNow - startTime;
+            var duration = DateTime.Now - startTime;
             snapshot.CreationDurationMs = (int)duration.TotalMilliseconds;
 
             _context.ImportSnapshots.Add(snapshot);
@@ -121,7 +121,7 @@ public class ImportSnapshotService : IImportSnapshotService
                 return ServiceResult<SnapshotRestoreResult>.Failed("Snapshot data is empty", operationId);
             }
 
-            var startTime = DateTime.UtcNow;
+            var startTime = DateTime.Now;
             var result = new SnapshotRestoreResult
             {
                 SnapshotId = snapshotId,
@@ -165,7 +165,7 @@ public class ImportSnapshotService : IImportSnapshotService
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
 
-                result.RestoreDuration = DateTime.UtcNow - startTime;
+                result.RestoreDuration = DateTime.Now - startTime;
                 result.RestorationSuccessful = true;
 
                 _logger.LogInformation("Snapshot restore completed successfully: {MatchesRestored} matches, {PlayerStatsRestored} player stats in {Duration} [Operation: {OperationId}]",
@@ -178,7 +178,7 @@ public class ImportSnapshotService : IImportSnapshotService
                 await transaction.RollbackAsync();
                 result.RestorationSuccessful = false;
                 result.ErrorMessage = ex.Message;
-                result.RestoreDuration = DateTime.UtcNow - startTime;
+                result.RestoreDuration = DateTime.Now - startTime;
                 
                 _logger.LogError(ex, "Snapshot restore failed and rolled back [Operation: {OperationId}]", operationId);
                 return ServiceResult<SnapshotRestoreResult>.Failed($"Restore failed: {ex.Message}", operationId);
@@ -229,7 +229,7 @@ public class ImportSnapshotService : IImportSnapshotService
     {
         try
         {
-            var cutoffDate = DateTime.UtcNow.AddDays(-olderThanDays);
+            var cutoffDate = DateTime.Now.AddDays(-olderThanDays);
             
             var oldSnapshots = await _context.ImportSnapshots
                 .Where(s => s.CreatedAt < cutoffDate)
@@ -311,7 +311,7 @@ public class ImportSnapshotService : IImportSnapshotService
 
         return new SnapshotData
         {
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = DateTime.Now,
             Matches = matches,
             PlayerStats = matches.SelectMany(m => m.MatchPlayerStats).ToList()
         };
@@ -322,7 +322,7 @@ public class ImportSnapshotService : IImportSnapshotService
         // Delete in correct order to respect foreign key constraints
         await ((Microsoft.EntityFrameworkCore.DbContext)_context).Database.ExecuteSqlRawAsync("DELETE FROM match_kickout_stats");
         await ((Microsoft.EntityFrameworkCore.DbContext)_context).Database.ExecuteSqlRawAsync("DELETE FROM match_player_stats");
-        await ((Microsoft.EntityFrameworkCore.DbContext)_context).Database.ExecuteSqlRawAsync("DELETE FROM match_source_analyses");
+        // match_source_analyses table removed from schema
         await ((Microsoft.EntityFrameworkCore.DbContext)_context).Database.ExecuteSqlRawAsync("DELETE FROM matches");
     }
 
@@ -333,7 +333,7 @@ public class ImportSnapshotService : IImportSnapshotService
             // Reset identity tracking to avoid conflicts
             foreach (var match in snapshotData.Matches)
             {
-                match.ImportedAt = DateTime.UtcNow;
+                match.ImportedAt = DateTime.Now;
                 _context.Matches.Add(match);
             }
         }
@@ -342,7 +342,7 @@ public class ImportSnapshotService : IImportSnapshotService
         {
             foreach (var playerStat in snapshotData.PlayerStats)
             {
-                playerStat.ImportedAt = DateTime.UtcNow;
+                playerStat.ImportedAt = DateTime.Now;
                 _context.MatchPlayerStats.Add(playerStat);
             }
         }
@@ -354,7 +354,7 @@ public class ImportSnapshotService : IImportSnapshotService
     public async Task<ServiceResult<SnapshotCreationResult>> CreatePreImportSnapshotAsync(string fileName, string importType = "Excel")
     {
         var operationId = Guid.NewGuid().ToString()[..8];
-        var startTime = DateTime.UtcNow;
+        var startTime = DateTime.Now;
         
         try
         {
@@ -387,7 +387,7 @@ public class ImportSnapshotService : IImportSnapshotService
             snapshot.IsCompressed = true;
             snapshot.CompressionRatio = uncompressedSize > 0 ? (decimal)compressedSize / uncompressedSize : 1m;
 
-            var duration = DateTime.UtcNow - startTime;
+            var duration = DateTime.Now - startTime;
             snapshot.CreationDurationMs = (int)duration.TotalMilliseconds;
 
             _context.ImportSnapshots.Add(snapshot);
@@ -458,7 +458,7 @@ public class ImportSnapshotService : IImportSnapshotService
                 return ServiceResult<SnapshotRestoreResult>.Failed("Snapshot data is empty", operationId);
             }
 
-            var startTime = DateTime.UtcNow;
+            var startTime = DateTime.Now;
             var result = new SnapshotRestoreResult
             {
                 SnapshotId = snapshotId,
@@ -508,7 +508,7 @@ public class ImportSnapshotService : IImportSnapshotService
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
 
-                result.RestoreDuration = DateTime.UtcNow - startTime;
+                result.RestoreDuration = DateTime.Now - startTime;
                 result.RestorationSuccessful = true;
 
                 _logger.LogInformation("Enhanced snapshot restore completed successfully: {MatchesRestored} matches, " +
@@ -522,7 +522,7 @@ public class ImportSnapshotService : IImportSnapshotService
                 await transaction.RollbackAsync();
                 result.RestorationSuccessful = false;
                 result.ErrorMessage = ex.Message;
-                result.RestoreDuration = DateTime.UtcNow - startTime;
+                result.RestoreDuration = DateTime.Now - startTime;
                 
                 _logger.LogError(ex, "Enhanced snapshot restore failed and rolled back [Operation: {OperationId}]", operationId);
                 return ServiceResult<SnapshotRestoreResult>.Failed($"Restore failed: {ex.Message}", operationId);
@@ -570,7 +570,7 @@ public class ImportSnapshotService : IImportSnapshotService
                     CreationDuration = s.CreationDurationMs.HasValue ? TimeSpan.FromMilliseconds((double)s.CreationDurationMs.Value) : null,
                     ImportType = s.ImportType ?? "Unknown",
                     AssociatedFileName = s.AssociatedFileName,
-                    IntegrityVerified = s.LastValidated.HasValue && s.LastValidated > DateTime.UtcNow.AddDays(-7),
+                    IntegrityVerified = s.LastValidated.HasValue && s.LastValidated > DateTime.Now.AddDays(-7),
                     LastValidated = s.LastValidated
                 })
                 .ToListAsync();
@@ -590,7 +590,7 @@ public class ImportSnapshotService : IImportSnapshotService
     public async Task<ServiceResult<SnapshotCleanupResult>> CleanupSnapshotsAsync(SnapshotCleanupPolicy? policy = null)
     {
         var operationId = Guid.NewGuid().ToString()[..8];
-        var startTime = DateTime.UtcNow;
+        var startTime = DateTime.Now;
         
         // Use default policy if none provided
         policy ??= new SnapshotCleanupPolicy();
@@ -605,7 +605,7 @@ public class ImportSnapshotService : IImportSnapshotService
             var deletionReasons = new List<string>();
 
             // Apply age-based cleanup
-            var ageCutoff = DateTime.UtcNow.AddDays(-policy.RetentionDays);
+            var ageCutoff = DateTime.Now.AddDays(-policy.RetentionDays);
             var oldSnapshots = await _context.ImportSnapshots
                 .Where(s => s.CreatedAt < ageCutoff)
                 .ToListAsync();
@@ -663,7 +663,7 @@ public class ImportSnapshotService : IImportSnapshotService
             // Filter out import snapshots if policy preserves them
             if (policy.PreserveImportSnapshots)
             {
-                var importSnapshotCutoff = DateTime.UtcNow.AddDays(-policy.ImportSnapshotRetentionDays);
+                var importSnapshotCutoff = DateTime.Now.AddDays(-policy.ImportSnapshotRetentionDays);
                 deleteCandidates = deleteCandidates
                     .Where(s => !s.ImportType?.Equals("Excel", StringComparison.OrdinalIgnoreCase) == true || 
                                s.CreatedAt < importSnapshotCutoff)
@@ -680,7 +680,7 @@ public class ImportSnapshotService : IImportSnapshotService
                 {
                     SnapshotsDeleted = 0,
                     SpaceFreedBytes = 0,
-                    CleanupDuration = DateTime.UtcNow - startTime,
+                    CleanupDuration = DateTime.Now - startTime,
                     DeletedSnapshotIds = new List<int>(),
                     CleanupReasons = new List<string> { "No cleanup required" },
                     PolicyTriggered = false,
@@ -700,7 +700,7 @@ public class ImportSnapshotService : IImportSnapshotService
             {
                 SnapshotsDeleted = deleteCandidates.Count,
                 SpaceFreedBytes = (long)spaceFreed,
-                CleanupDuration = DateTime.UtcNow - startTime,
+                CleanupDuration = DateTime.Now - startTime,
                 DeletedSnapshotIds = deleteCandidates.Select(s => s.Id).ToList(),
                 CleanupReasons = deletionReasons,
                 PolicyTriggered = true,
@@ -727,7 +727,7 @@ public class ImportSnapshotService : IImportSnapshotService
     /// </summary>
     public async Task<ServiceResult<SnapshotValidationResult>> ValidateSnapshotAsync(int snapshotId, bool performIntegrityCheck = false)
     {
-        var startTime = DateTime.UtcNow;
+        var startTime = DateTime.Now;
         var result = new SnapshotValidationResult
         {
             ValidationPerformed = startTime
@@ -871,12 +871,12 @@ public class ImportSnapshotService : IImportSnapshotService
             result.ValidationWarnings = warnings;
             result.Diagnostics = diagnostics;
             result.IsValid = !errors.Any() && result.DataIntact && result.CanDecompress;
-            result.ValidationDuration = DateTime.UtcNow - startTime;
+            result.ValidationDuration = DateTime.Now - startTime;
 
             // Update last validated timestamp
             if (result.IsValid)
             {
-                snapshot.LastValidated = DateTime.UtcNow;
+                snapshot.LastValidated = DateTime.Now;
                 await _context.SaveChangesAsync();
             }
 
@@ -887,7 +887,7 @@ public class ImportSnapshotService : IImportSnapshotService
             _logger.LogError(ex, "Failed to validate snapshot {SnapshotId}", snapshotId);
             result.IsValid = false;
             result.ValidationErrors = new[] { $"Validation failed: {ex.Message}" };
-            result.ValidationDuration = DateTime.UtcNow - startTime;
+            result.ValidationDuration = DateTime.Now - startTime;
             return ServiceResult<SnapshotValidationResult>.Success(result);
         }
     }
@@ -957,7 +957,7 @@ public class ImportSnapshotService : IImportSnapshotService
                 });
             }
 
-            var oldSnapshots = snapshots.Where(s => s.CreatedAt < DateTime.UtcNow.AddDays(-30)).Count();
+            var oldSnapshots = snapshots.Where(s => s.CreatedAt < DateTime.Now.AddDays(-30)).Count();
             if (oldSnapshots > 10)
             {
                 recommendations.Add(new SnapshotStorageRecommendation
@@ -997,7 +997,7 @@ public class ImportSnapshotService : IImportSnapshotService
     public async Task<ServiceResult<SnapshotCompressionResult>> CompressSnapshotsAsync(int? snapshotId = null)
     {
         var operationId = Guid.NewGuid().ToString()[..8];
-        var startTime = DateTime.UtcNow;
+        var startTime = DateTime.Now;
         
         try
         {
@@ -1110,7 +1110,7 @@ public class ImportSnapshotService : IImportSnapshotService
             result.SnapshotsCompressed = compressed.Count;
             result.SnapshotsSkipped = skipped.Count;
             result.SpaceSavedBytes = totalSpaceSaved;
-            result.CompressionDuration = DateTime.UtcNow - startTime;
+            result.CompressionDuration = DateTime.Now - startTime;
             result.AverageCompressionRatio = compressionRatios.Any() ? compressionRatios.Average() : 1m;
             result.CompressedSnapshotIds = compressed;
             result.Errors = errors;

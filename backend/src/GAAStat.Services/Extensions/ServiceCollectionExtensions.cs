@@ -18,7 +18,7 @@ public static class ServiceCollectionExtensions
         // Core import services
         services.AddScoped<IExcelImportService, ExcelImportService>();
         services.AddScoped<IStatisticsCalculationService, StatisticsCalculationService>();
-        services.AddScoped<IImportSnapshotService, ImportSnapshotService>();
+        services.AddScoped<IImportSnapshotService, NullImportSnapshotService>(); // Using null implementation for core ETL
         
         // Phase 2 Enhanced services
         services.AddScoped<IBulkOperationsService, BulkOperationsService>();
@@ -43,7 +43,7 @@ public static class ServiceCollectionExtensions
     {
         services.AddScoped<IExcelImportService, ExcelImportService>();
         services.AddScoped<IStatisticsCalculationService, StatisticsCalculationService>();
-        services.AddScoped<IImportSnapshotService, ImportSnapshotService>();
+        services.AddScoped<IImportSnapshotService, NullImportSnapshotService>(); // Using null implementation for core ETL
 
         return services;
     }
@@ -68,7 +68,7 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddPhase2EnhancedServices(this IServiceCollection services)
     {
         // Enhanced snapshot management
-        services.AddScoped<IImportSnapshotService, ImportSnapshotService>();
+        services.AddScoped<IImportSnapshotService, NullImportSnapshotService>(); // Using null implementation for core ETL
         
         // High-performance bulk operations
         services.AddScoped<IBulkOperationsService, BulkOperationsService>();
@@ -100,7 +100,7 @@ public static class ServiceCollectionExtensions
     {
         services.AddScoped<IAdvancedExcelProcessorService, AdvancedExcelProcessorService>();
         services.AddScoped<IBulkOperationsService, BulkOperationsService>();
-        services.AddScoped<IImportSnapshotService, ImportSnapshotService>();
+        services.AddScoped<IImportSnapshotService, NullImportSnapshotService>(); // Using null implementation for core ETL
         
         return services;
     }

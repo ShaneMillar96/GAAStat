@@ -20,7 +20,8 @@ builder.Services.AddDbContext<GAAStatDbContext>(options =>
 builder.Services.AddScoped<IGAAStatDbContext>(provider =>
     provider.GetService<GAAStatDbContext>()!);
 
-// Skip service registration temporarily for testing
+// Register all GAA Statistics services
+builder.Services.AddGAAStatServices();
 
 // Add memory caching for analytics performance
 builder.Services.AddMemoryCache();
@@ -71,6 +72,12 @@ builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(optio
     options.ValueLengthLimit = int.MaxValue;
     options.MultipartBodyLengthLimit = fileValidationOptions.MaxTotalSizeBytes;
     options.MultipartHeadersLengthLimit = int.MaxValue;
+});
+
+// Configure Kestrel server limits for large file uploads
+builder.Services.Configure<Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerOptions>(options =>
+{
+    options.Limits.MaxRequestBodySize = fileValidationOptions.MaxTotalSizeBytes;
 });
 
 // Add health checks
@@ -219,23 +226,24 @@ app.MapGet("/", () => new
 });
 
 // Ensure database is created and migrations are applied in development
-if (app.Environment.IsDevelopment())
-{
-    using (var scope = app.Services.CreateScope())
-    {
-        var dbContext = scope.ServiceProvider.GetRequiredService<GAAStatDbContext>();
-        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-        
-        try
-        {
-            await dbContext.Database.EnsureCreatedAsync();
-            logger.LogInformation("Database connection verified successfully");
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to connect to database. Please check connection string");
-        }
-    }
-}
+// Commented out for now to test basic server functionality
+//if (app.Environment.IsDevelopment())
+//{
+//    using (var scope = app.Services.CreateScope())
+//    {
+//        var dbContext = scope.ServiceProvider.GetRequiredService<GAAStatDbContext>();
+//        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+//        
+//        try
+//        {
+//            await dbContext.Database.EnsureCreatedAsync();
+//            logger.LogInformation("Database connection verified successfully");
+//        }
+//        catch (Exception ex)
+//        {
+//            logger.LogError(ex, "Failed to connect to database. Please check connection string");
+//        }
+//    }
+//}
 
 app.Run();
