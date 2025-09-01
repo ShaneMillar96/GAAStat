@@ -2,8 +2,6 @@ using Microsoft.EntityFrameworkCore;
 using GAAStat.Dal.Contexts;
 using GAAStat.Dal.Interfaces;
 using GAAStat.Dal;
-using GAAStat.Services.Extensions;
-using GAAStat.Api.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -20,8 +18,6 @@ builder.Services.AddDbContext<GAAStatDbContext>(options =>
 builder.Services.AddScoped<IGAAStatDbContext>(provider =>
     provider.GetService<GAAStatDbContext>()!);
 
-// Register all GAA Statistics services
-builder.Services.AddGAAStatServices();
 
 // Add memory caching for analytics performance
 builder.Services.AddMemoryCache();
@@ -55,30 +51,12 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Configure file validation options
-var fileValidationOptions = FileValidationOptions.FromEnvironment();
 
-// Override specific settings from environment variables
-if (long.TryParse(Environment.GetEnvironmentVariable("MAX_FILE_SIZE_MB"), out var maxFileSizeMB))
-{
-    fileValidationOptions.MaxFileSizeBytes = maxFileSizeMB * 1024 * 1024;
-}
 
-builder.Services.AddSingleton(fileValidationOptions);
 
-// Configure request size limits for file uploads
-builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
-{
-    options.ValueLengthLimit = int.MaxValue;
-    options.MultipartBodyLengthLimit = fileValidationOptions.MaxTotalSizeBytes;
-    options.MultipartHeadersLengthLimit = int.MaxValue;
-});
 
-// Configure Kestrel server limits for large file uploads
-builder.Services.Configure<Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerOptions>(options =>
-{
-    options.Limits.MaxRequestBodySize = fileValidationOptions.MaxTotalSizeBytes;
-});
+
+
 
 // Add health checks
 builder.Services.AddHealthChecks()
@@ -146,9 +124,6 @@ app.Use(async (context, next) =>
     await next();
 });
 
-// Add custom middleware in correct order
-app.UseMiddleware<GlobalExceptionMiddleware>();
-// app.UseMiddleware<FileValidationMiddleware>(); // Commented out temporarily
 
 // Add request logging middleware for development
 if (app.Environment.IsDevelopment())
@@ -224,26 +199,5 @@ app.MapGet("/", () => new
         Swagger = "/swagger"
     }
 });
-
-// Ensure database is created and migrations are applied in development
-// Commented out for now to test basic server functionality
-//if (app.Environment.IsDevelopment())
-//{
-//    using (var scope = app.Services.CreateScope())
-//    {
-//        var dbContext = scope.ServiceProvider.GetRequiredService<GAAStatDbContext>();
-//        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-//        
-//        try
-//        {
-//            await dbContext.Database.EnsureCreatedAsync();
-//            logger.LogInformation("Database connection verified successfully");
-//        }
-//        catch (Exception ex)
-//        {
-//            logger.LogError(ex, "Failed to connect to database. Please check connection string");
-//        }
-//    }
-//}
 
 app.Run();

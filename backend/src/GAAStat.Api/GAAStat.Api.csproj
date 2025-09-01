@@ -19,4 +19,9 @@
     <ProjectReference Include="..\GAAStat.Services\GAAStat.Services.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Controllers\" />
+    <Folder Include="Middleware\" />
+  </ItemGroup>
+
 </Project>
