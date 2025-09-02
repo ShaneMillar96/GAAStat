@@ -18,6 +18,11 @@ builder.Services.AddDbContext<GAAStatDbContext>(options =>
 builder.Services.AddScoped<IGAAStatDbContext>(provider =>
     provider.GetService<GAAStatDbContext>()!);
 
+// Register ETL Services
+builder.Services.AddScoped<GAAStat.Services.Interfaces.IExcelProcessingService, GAAStat.Services.Implementations.ExcelProcessingService>();
+builder.Services.AddScoped<GAAStat.Services.Interfaces.IProgressTrackingService, GAAStat.Services.Implementations.ProgressTrackingService>();
+builder.Services.AddScoped<GAAStat.Services.Interfaces.IExcelParsingService, GAAStat.Services.Implementations.ExcelParsingService>();
+builder.Services.AddScoped<GAAStat.Services.Interfaces.IDataTransformationService, GAAStat.Services.Implementations.DataTransformationService>();
 
 // Add memory caching for analytics performance
 builder.Services.AddMemoryCache();
@@ -29,6 +34,22 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
         options.JsonSerializerOptions.WriteIndented = true;
     });
+
+// Configure request size limits for file uploads
+builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
+{
+    options.ValueCountLimit = int.MaxValue;
+    options.ValueLengthLimit = int.MaxValue;
+    options.KeyLengthLimit = int.MaxValue;
+    options.MultipartHeadersCountLimit = int.MaxValue;
+    options.MultipartHeadersLengthLimit = int.MaxValue;
+    options.MultipartBodyLengthLimit = GAAStat.Dal.EnvironmentVariables.MaxFileSizeMb * 1024 * 1024; // Use environment variable
+});
+
+builder.Services.Configure<Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerOptions>(options =>
+{
+    options.Limits.MaxRequestBodySize = GAAStat.Dal.EnvironmentVariables.MaxFileSizeMb * 1024 * 1024; // Use environment variable
+});
 
 // Configure CORS for frontend development
 builder.Services.AddCors(options =>
@@ -194,6 +215,7 @@ app.MapGet("/", () => new
         Analytics = "/api/analytics",
         Matches = "/api/matches",
         Statistics = "/api/statistics",
+        Etl = "/api/etl",
         Import = "/api/import",
         Health = "/health",
         Swagger = "/swagger"

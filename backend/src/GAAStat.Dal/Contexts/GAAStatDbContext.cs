@@ -45,6 +45,11 @@ public partial class GAAStatDbContext : DbContext, IGAAStatDbContext
     public virtual DbSet<SeasonPlayerTotal> SeasonPlayerTotals { get; set; }
     public virtual DbSet<PositionAverage> PositionAverages { get; set; }
 
+    // ETL Tracking Tables
+    public virtual DbSet<EtlJob> EtlJobs { get; set; }
+    public virtual DbSet<EtlJobProgress> EtlJobProgresses { get; set; }
+    public virtual DbSet<EtlValidationError> EtlValidationErrors { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         // Configure entity relationships and constraints
@@ -52,6 +57,7 @@ public partial class GAAStatDbContext : DbContext, IGAAStatDbContext
         ConfigureCoreEntities(modelBuilder);
         ConfigureStatisticsEntities(modelBuilder);
         ConfigureAggregationEntities(modelBuilder);
+        ConfigureEtlEntities(modelBuilder);
     }
 
     private static void ConfigureReferenceEntities(ModelBuilder modelBuilder)
@@ -202,6 +208,47 @@ public partial class GAAStatDbContext : DbContext, IGAAStatDbContext
                 "(avg_tackle_success_rate IS NULL OR (avg_tackle_success_rate >= 0 AND avg_tackle_success_rate <= 1))");
             entity.HasCheckConstraint("CK_PositionAverage_Games", 
                 "avg_scores_per_game >= 0 AND avg_possessions_per_game >= 0 AND avg_tackles_per_game >= 0");
+        });
+    }
+
+    private static void ConfigureEtlEntities(ModelBuilder modelBuilder)
+    {
+        // ETL Jobs
+        modelBuilder.Entity<EtlJob>(entity =>
+        {
+            entity.HasIndex(e => e.Status);
+            entity.HasIndex(e => e.CreatedAt);
+            entity.HasIndex(e => e.CreatedBy);
+            entity.HasCheckConstraint("CK_EtlJob_Status", "status IN ('pending', 'processing', 'completed', 'failed')");
+            entity.HasCheckConstraint("CK_EtlJob_FileSize", "file_size_bytes > 0");
+            entity.HasCheckConstraint("CK_EtlJob_CompletionDates", "completed_at IS NULL OR started_at IS NULL OR completed_at >= started_at");
+        });
+
+        // ETL Job Progress
+        modelBuilder.Entity<EtlJobProgress>(entity =>
+        {
+            entity.HasIndex(e => e.JobId);
+            entity.HasIndex(e => e.UpdatedAt);
+            entity.HasCheckConstraint("CK_EtlProgress_Steps", "total_steps IS NULL OR completed_steps IS NULL OR completed_steps <= total_steps");
+            entity.HasCheckConstraint("CK_EtlProgress_CompletedStepsPositive", "completed_steps IS NULL OR completed_steps >= 0");
+            
+            entity.HasOne(d => d.Job)
+                .WithMany(p => p.EtlJobProgresses)
+                .HasForeignKey(d => d.JobId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ETL Validation Errors
+        modelBuilder.Entity<EtlValidationError>(entity =>
+        {
+            entity.HasIndex(e => e.JobId);
+            entity.HasIndex(e => e.ErrorType);
+            entity.HasCheckConstraint("CK_EtlErrors_RowNumberPositive", "row_number IS NULL OR row_number > 0");
+            
+            entity.HasOne(d => d.Job)
+                .WithMany(p => p.EtlValidationErrors)
+                .HasForeignKey(d => d.JobId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }
