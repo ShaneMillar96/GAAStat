@@ -17,11 +17,14 @@ public static class EtlJobStatus
 public static class EtlStages
 {
     public const string INITIALIZING = "Initializing";
+    public const string SEEDING_REFERENCE_DATA = "Seeding Reference Data";
     public const string CLEARING_DATA = "Clearing Existing Data";
     public const string PARSING_EXCEL = "Parsing Excel";
     public const string VALIDATING_DATA = "Validating Data";
     public const string SAVING_MATCHES = "Saving Matches";
+    public const string SAVING_TEAM_STATS = "Saving Team Statistics";
     public const string SAVING_PLAYER_STATS = "Saving Player Statistics";
+    public const string SAVING_SPECIALIZED_ANALYTICS = "Saving Specialized Analytics";
     public const string FINALIZING = "Finalizing";
 }
 

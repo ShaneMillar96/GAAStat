@@ -1,0 +1,180 @@
+using Microsoft.Extensions.Logging;
+using GAAStat.Services.Interfaces;
+using GAAStat.Services.Models;
+using GAAStat.Dal.Interfaces;
+using GAAStat.Dal.Models.Application;
+using System.Text.Json;
+
+namespace GAAStat.Services.Implementations;
+
+/// <summary>
+/// Processes and saves KPI definitions from Excel to database
+/// Handles data transformation and validation for KPI metadata
+/// </summary>
+public class KpiDefinitionsProcessor
+{
+    private readonly IGAAStatDbContext _context;
+    private readonly ILogger<KpiDefinitionsProcessor> _logger;
+
+    public KpiDefinitionsProcessor(
+        IGAAStatDbContext context,
+        ILogger<KpiDefinitionsProcessor> logger)
+    {
+        _context = context;
+        _logger = logger;
+    }
+
+    /// <summary>
+    /// Saves KPI definitions to database
+    /// </summary>
+    public async Task<ServiceResult<KpiProcessingResult>> SaveKpiDefinitionsAsync(
+        KpiDefinitionsParsingResult parsingResult,
+        int etlJobId)
+    {
+        try
+        {
+            var result = new KpiProcessingResult
+            {
+                ProcessedCount = 0,
+                SkippedCount = 0,
+                ErrorCount = parsingResult.ValidationErrors.Count,
+                ValidationErrors = parsingResult.ValidationErrors
+            };
+
+            if (!parsingResult.KpiDefinitions.Any())
+            {
+                _logger.LogInformation("No KPI definitions to process for ETL job {JobId}", etlJobId);
+                return ServiceResult<KpiProcessingResult>.Success(result);
+            }
+
+            _logger.LogInformation("Processing {Count} KPI definitions for ETL job {JobId}", 
+                parsingResult.KpiDefinitions.Count, etlJobId);
+
+            foreach (var kpiData in parsingResult.KpiDefinitions)
+            {
+                try
+                {
+                    // Check if KPI already exists
+                    var existingKpi = _context.KpiDefinitions
+                        .FirstOrDefault(k => k.KpiCode == kpiData.KpiCode);
+
+                    if (existingKpi != null)
+                    {
+                        // Update existing KPI
+                        UpdateKpiDefinition(existingKpi, kpiData);
+                        _logger.LogDebug("Updated existing KPI definition: {KpiCode}", kpiData.KpiCode);
+                    }
+                    else
+                    {
+                        // Create new KPI
+                        var newKpi = CreateKpiDefinition(kpiData);
+                        await _context.KpiDefinitions.AddAsync(newKpi);
+                        _logger.LogDebug("Created new KPI definition: {KpiCode}", kpiData.KpiCode);
+                    }
+
+                    result.ProcessedCount++;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to process KPI definition {KpiCode}", kpiData.KpiCode);
+                    
+                    result.ValidationErrors.Add(new ValidationError
+                    {
+                        SheetName = parsingResult.SheetName,
+                        ErrorType = EtlErrorTypes.PROCESSING_ERROR,
+                        ErrorMessage = $"Failed to save KPI '{kpiData.KpiCode}': {ex.Message}",
+                        SuggestedFix = "Check KPI data format and database constraints"
+                    });
+                    
+                    result.ErrorCount++;
+                    result.SkippedCount++;
+                }
+            }
+
+            // Save all changes
+            var savedCount = await _context.SaveChangesAsync();
+            
+            _logger.LogInformation("Saved {SavedCount} KPI definition changes for ETL job {JobId}. Processed: {ProcessedCount}, Errors: {ErrorCount}", 
+                savedCount, etlJobId, result.ProcessedCount, result.ErrorCount);
+
+            return ServiceResult<KpiProcessingResult>.Success(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to save KPI definitions for ETL job {JobId}", etlJobId);
+            return ServiceResult<KpiProcessingResult>.Failed(
+                $"Failed to save KPI definitions: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Creates new KPI definition entity
+    /// </summary>
+    private static KpiDefinition CreateKpiDefinition(KpiDefinitionData kpiData)
+    {
+        return new KpiDefinition
+        {
+            KpiCode = kpiData.KpiCode,
+            KpiName = kpiData.KpiName,
+            Description = kpiData.Description,
+            CalculationFormula = kpiData.CalculationFormula,
+            PositionRelevance = kpiData.PositionRelevance,
+            BenchmarkValues = CreateBenchmarkJson(kpiData)
+        };
+    }
+
+    /// <summary>
+    /// Updates existing KPI definition entity
+    /// </summary>
+    private static void UpdateKpiDefinition(KpiDefinition existingKpi, KpiDefinitionData kpiData)
+    {
+        existingKpi.KpiName = kpiData.KpiName;
+        existingKpi.Description = kpiData.Description;
+        existingKpi.CalculationFormula = kpiData.CalculationFormula;
+        existingKpi.PositionRelevance = kpiData.PositionRelevance;
+        existingKpi.BenchmarkValues = CreateBenchmarkJson(kpiData);
+    }
+
+    /// <summary>
+    /// Creates benchmark values JSON from KPI data
+    /// </summary>
+    private static string? CreateBenchmarkJson(KpiDefinitionData kpiData)
+    {
+        var hasAnyThreshold = kpiData.ExcellentThreshold.HasValue ||
+                             kpiData.GoodThreshold.HasValue ||
+                             kpiData.AverageThreshold.HasValue ||
+                             kpiData.PoorThreshold.HasValue;
+
+        if (!hasAnyThreshold)
+            return null;
+
+        var benchmarks = new Dictionary<string, object?>
+        {
+            ["excellent"] = kpiData.ExcellentThreshold,
+            ["good"] = kpiData.GoodThreshold,
+            ["average"] = kpiData.AverageThreshold,
+            ["poor"] = kpiData.PoorThreshold,
+            ["category"] = kpiData.Category,
+            ["unit"] = kpiData.Unit,
+            ["is_percentage"] = kpiData.IsPercentage
+        };
+
+        // Remove null values
+        benchmarks = benchmarks.Where(kvp => kvp.Value != null)
+                              .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+
+        return benchmarks.Any() ? JsonSerializer.Serialize(benchmarks) : null;
+    }
+}
+
+/// <summary>
+/// Result of KPI definitions processing operation
+/// </summary>
+public class KpiProcessingResult
+{
+    public int ProcessedCount { get; set; }
+    public int SkippedCount { get; set; }
+    public int ErrorCount { get; set; }
+    public List<ValidationError> ValidationErrors { get; set; } = new();
+    public bool IsSuccess => ErrorCount == 0 || ValidationErrors.All(e => e.ErrorType != EtlErrorTypes.CRITICAL_ERROR);
+}

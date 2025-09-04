@@ -658,4 +658,186 @@ public class MatchStatisticsService
 - [ ] Security scan completed
 - [ ] Performance benchmarks acceptable
 
-This guide will be updated as the CSV data structure is analyzed and additional patterns are identified.
+## ETL Excel Processing Patterns
+
+### Excel File Structure Requirements
+
+The GAAStat ETL system processes Excel files containing GAA match statistics with specific structural requirements:
+
+**File Structure:**
+- Match sheets: Named with pattern `##. Competition vs Team` (e.g., `07. Drum vs Lissan 03.08.25`)
+- Player stats sheets: Named with pattern `##. Player Stats vs Team` (e.g., `07. Player Stats vs Lissan 03.0`)
+- Sheet numbers (01-99) are used to associate player stats sheets with their corresponding match sheets
+
+**Critical Limitations:**
+- Excel sheet names are truncated to 31 characters, which can cause date information loss
+- Sheet detection relies on numeric prefixes for reliable matching
+- Player stats sheets must have corresponding match sheets with the same number
+
+### Critical Known Issues and Solutions
+
+#### 1. Stream Exhaustion Issue
+**Problem:** Creating multiple `ExcelPackage` instances from the same stream exhausts it, causing subsequent sheets to fail processing.
+
+**Solution:** Load `ExcelPackage` once before the processing loop:
+```csharp
+// CRITICAL FIX: Load ExcelPackage ONCE to prevent stream exhaustion
+_logger.LogInformation("🔧 Loading ExcelPackage once for all sheet processing to prevent stream issues");
+fileStream.Position = 0;
+
+ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
+using var package = new ExcelPackage(fileStream);
+
+// Pass ExcelWorksheet objects instead of recreating from stream
+var worksheet = package.Workbook.Worksheets[sheet.Name];
+```
+
+#### 2. Entity Framework Context State Corruption
+**Problem:** Reusing the same `DbContext` instance across multiple sheet processing iterations causes context state corruption and connection pool exhaustion, leading to hanging save operations.
+
+**Solution:** Create scoped `DbContext` for each sheet processing iteration:
+```csharp
+// CRITICAL FIX: Create new DbContext scope for each sheet
+using var scope = _serviceProvider.CreateScope();
+var scopedContext = scope.ServiceProvider.GetRequiredService<GAAStatDbContext>();
+
+var statsCreated = await SavePlayerStatisticsWithScopedContextAsync(
+    scopedContext, jobId, matchId.Value, playerStatistics, cancellationToken);
+```
+
+#### 3. Sheet Processing Timeout Handling
+**Problem:** Using `return` in timeout catch blocks exits the entire processing function, preventing remaining sheets from being processed.
+
+**Solution:** Use `continue` to process remaining sheets:
+```csharp
+catch (OperationCanceledException ex) when (sheetCancellationTokenSource.Token.IsCancellationRequested)
+{
+    _logger.LogError("Sheet processing timed out after 2 minutes for sheet '{SheetName}' - continuing with remaining sheets", sheet.Name);
+    
+    // CRITICAL FIX: Continue with remaining sheets instead of exiting entire function
+    continue;
+}
+```
+
+### EPPlus Best Practices
+
+**Stream Management:**
+- Always load `ExcelPackage` once when processing multiple sheets
+- Reset stream position to 0 before creating the package
+- Pass `ExcelWorksheet` objects instead of recreating from stream
+
+**Performance Optimization:**
+- Use `ExcelPackage.LicenseContext = LicenseContext.NonCommercial` for licensing
+- Process worksheets directly instead of recreating package instances
+- Implement proper disposal patterns with `using` statements
+
+### Entity Framework Core ETL Patterns
+
+**DbContext Scoping:**
+```csharp
+public async Task ProcessWithScopedContext()
+{
+    // Create new scope for isolated context state
+    using var scope = _serviceProvider.CreateScope();
+    var scopedContext = scope.ServiceProvider.GetRequiredService<GAAStatDbContext>();
+    
+    // Process data with fresh context
+    await ProcessDataAsync(scopedContext);
+}
+```
+
+**Batch Processing:**
+- Use configurable batch sizes (default: 100 records)
+- Process players and statistics in batches to avoid memory issues
+- Implement bulk operations for better performance
+
+**Async Best Practices:**
+```csharp
+// Always use ConfigureAwait(false) to prevent deadlocks
+await scopedContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+// Use proper cancellation token handling
+using var cancellationTokenSource = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+```
+
+### Sheet-to-Match Mapping Pattern
+
+**Reliable Sheet Association:**
+```csharp
+private string? ExtractSheetNumber(string sheetName)
+{
+    if (string.IsNullOrEmpty(sheetName))
+        return null;
+        
+    var match = System.Text.RegularExpressions.Regex.Match(sheetName, @"^(\d{2})\.");
+    return match.Success ? match.Groups[1].Value : null;
+}
+
+private int? FindMatchIdForPlayerStatsSheet(string playerStatsSheetName, Dictionary<string, int> matchIdMap)
+{
+    var playerStatsNumber = ExtractSheetNumber(playerStatsSheetName);
+    if (playerStatsNumber == null) return null;
+
+    // Find corresponding match sheet with same number
+    foreach (var kvp in matchIdMap)
+    {
+        var matchSheetNumber = ExtractSheetNumber(kvp.Key);
+        if (matchSheetNumber == playerStatsNumber)
+        {
+            return kvp.Value;
+        }
+    }
+    
+    return null;
+}
+```
+
+### Error Handling Strategies
+
+**Timeout Management:**
+- Implement per-sheet timeouts (default: 2 minutes)
+- Use overall processing timeout (default: 10 minutes)
+- Continue processing remaining sheets on individual timeouts
+
+**Validation Error Collection:**
+```csharp
+private async Task RecordValidationErrorAsync(int jobId, string sheetName, 
+    string errorType, string errorMessage, string suggestedFix)
+{
+    var error = new EtlValidationError
+    {
+        JobId = jobId,
+        SheetName = sheetName,
+        ErrorType = errorType,
+        ErrorMessage = errorMessage,
+        SuggestedFix = suggestedFix,
+        CreatedAt = DateTime.UtcNow
+    };
+    
+    await _progressService.RecordValidationErrorAsync(error);
+}
+```
+
+**Transaction Boundaries:**
+- Use scoped contexts for transaction isolation
+- Implement proper rollback strategies for failed operations
+- Maintain data consistency across batch operations
+
+### Performance Considerations
+
+**Memory Management:**
+- Process large files in configurable batches
+- Dispose of resources properly with `using` statements
+- Avoid keeping large objects in memory longer than necessary
+
+**Connection Pool Management:**
+- Create new DbContext instances for isolated operations
+- Use scoped service provider for dependency injection
+- Implement proper connection lifetime management
+
+**Concurrent Processing:**
+- Use `Task.Yield()` to allow other tasks to run during long operations
+- Implement cancellation token support throughout the pipeline
+- Monitor and log processing durations for performance tuning
+
+This guide will be updated as additional ETL patterns and optimizations are identified.

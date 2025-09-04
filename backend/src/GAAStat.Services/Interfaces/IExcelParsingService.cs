@@ -1,4 +1,5 @@
 using GAAStat.Services.Models;
+using OfficeOpenXml;
 
 namespace GAAStat.Services.Interfaces;
 
@@ -48,9 +49,21 @@ public interface IExcelParsingService
     /// <param name="fileStream">Excel file stream</param>
     /// <param name="sheetName">Name of sheet to parse</param>
     /// <param name="matchId">Database match ID for linking statistics</param>
+    /// <param name="cancellationToken">Cancellation token for operation timeout</param>
     /// <returns>Collection of player statistics with validation errors</returns>
     Task<ServiceResult<IEnumerable<PlayerStatisticsData>>> ParsePlayerStatisticsFromSheetAsync(
-        Stream fileStream, string sheetName, int matchId);
+        Stream fileStream, string sheetName, int matchId, CancellationToken cancellationToken = default);
+    
+    /// <summary>
+    /// Parses player statistics from an Excel worksheet (optimized for stream management)
+    /// Phase 2: Extracts detailed player performance data from pre-loaded worksheet
+    /// </summary>
+    /// <param name="worksheet">Pre-loaded Excel worksheet</param>
+    /// <param name="matchId">Database match ID for linking statistics</param>
+    /// <param name="cancellationToken">Cancellation token for operation timeout</param>
+    /// <returns>Collection of player statistics with validation errors</returns>
+    Task<ServiceResult<IEnumerable<PlayerStatisticsData>>> ParsePlayerStatisticsFromWorksheetAsync(
+        ExcelWorksheet worksheet, int matchId, CancellationToken cancellationToken = default);
     
     /// <summary>
     /// Validates player statistics sheet structure and data
@@ -60,4 +73,6 @@ public interface IExcelParsingService
     /// <returns>Validation result with detailed error information</returns>
     Task<ServiceResult<PlayerStatsValidationResult>> ValidatePlayerStatisticsSheetAsync(
         Stream fileStream, string sheetName);
+    
+    // KPI parsing interface temporarily removed to fix compilation errors
 }

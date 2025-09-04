@@ -317,6 +317,13 @@ public class DataTransformationService : IDataTransformationService
         {
             var normalizedName = NormalizePlayerName(playerName);
             
+            // Validate that the player name is not an invalid template placeholder or summary row
+            if (!ExcelColumnMappings.IsValidPlayerName(normalizedName))
+            {
+                _logger.LogWarning("🚫 BLOCKING invalid player creation: '{PlayerName}' - appears to be template placeholder or summary row", normalizedName);
+                return ServiceResult<int>.Failed($"Invalid player name: {normalizedName}");
+            }
+            
             // Exact match first
             var player = await _context.Players
                 .FirstOrDefaultAsync(p => p.PlayerName.ToLower() == normalizedName.ToLower());

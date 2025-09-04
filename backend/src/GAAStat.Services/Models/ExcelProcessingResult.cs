@@ -78,6 +78,7 @@ public class SheetInfo
     public int RowCount { get; set; }
     public int ColumnCount { get; set; }
     public bool ContainsMatchData { get; set; }
+    public bool ContainsPlayerData { get; set; }
     public string? DetectedTeamNames { get; set; }
     public DateOnly? DetectedMatchDate { get; set; }
 }

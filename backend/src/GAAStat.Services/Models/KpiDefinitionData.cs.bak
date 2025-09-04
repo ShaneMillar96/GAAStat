@@ -1,0 +1,38 @@
+using GAAStat.Services.Interfaces;
+
+namespace GAAStat.Services.Models;
+
+/// <summary>
+/// Represents KPI definition data parsed from Excel
+/// </summary>
+public class KpiDefinitionData
+{
+    public string KpiCode { get; set; } = string.Empty;
+    public string KpiName { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public string CalculationFormula { get; set; } = string.Empty;
+    public string PositionRelevance { get; set; } = string.Empty;
+    
+    // Benchmark thresholds
+    public decimal? ExcellentThreshold { get; set; }
+    public decimal? GoodThreshold { get; set; }
+    public decimal? AverageThreshold { get; set; }
+    public decimal? PoorThreshold { get; set; }
+    
+    // Additional metadata
+    public string Category { get; set; } = string.Empty;
+    public string Unit { get; set; } = string.Empty;
+    public bool IsPercentage { get; set; }
+}
+
+/// <summary>
+/// Result of KPI definitions parsing operation
+/// </summary>
+public class KpiDefinitionsParsingResult
+{
+    public List<KpiDefinitionData> KpiDefinitions { get; set; } = new();
+    public List<ValidationError> ValidationErrors { get; set; } = new();
+    public bool IsSuccess => ValidationErrors.Count == 0 || ValidationErrors.All(e => e.ErrorType != EtlErrorTypes.CRITICAL_ERROR);
+    public int TotalKpisFound { get; set; }
+    public string SheetName { get; set; } = string.Empty;
+}

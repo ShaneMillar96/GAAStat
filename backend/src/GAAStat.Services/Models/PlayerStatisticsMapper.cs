@@ -10,11 +10,11 @@ namespace GAAStat.Services.Models;
 /// </summary>
 public class PlayerStatisticsMapper
 {
-    private readonly ILogger<PlayerStatisticsMapper> _logger;
+    private readonly ILogger _logger;
     private readonly IDataTransformationService _transformationService;
 
     public PlayerStatisticsMapper(
-        ILogger<PlayerStatisticsMapper> logger,
+        ILogger logger,
         IDataTransformationService transformationService)
     {
         _logger = logger;
@@ -42,7 +42,7 @@ public class PlayerStatisticsMapper
             };
 
             // Map basic engagement data
-            playerStats.MinutesPlayed = ParseIntValue(rowData, ExcelColumnMappings.PlayerInfo.JERSEY_NUMBER, 0, 70, 
+            playerStats.MinutesPlayed = ParseIntValue(rowData, ExcelColumnMappings.PlayerInfo.MINUTES_PLAYED, 0, 70, 
                 "Minutes played", rowNumber, sheetName, errors);
             playerStats.TotalEngagements = ParseIntValue(rowData, ExcelColumnMappings.PlayerInfo.TOTAL_ENGAGEMENTS, 0, 200, 
                 "Total engagements", rowNumber, sheetName, errors);
@@ -72,7 +72,7 @@ public class PlayerStatisticsMapper
                 "Total shots", rowNumber, sheetName, errors);
 
             // Parse scores from the Scores column (format: "G-PP" or "G-PP(Nf)")
-            var scoresText = ParseStringValue(rowData, ExcelColumnMappings.Shooting.SCORES, 
+            var scoresText = ParseStringValue(rowData, ExcelColumnMappings.Possession.SCORES, 
                 "Scores", rowNumber, sheetName, errors);
             
             if (!string.IsNullOrEmpty(scoresText))

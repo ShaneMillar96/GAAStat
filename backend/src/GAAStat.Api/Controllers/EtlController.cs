@@ -61,9 +61,15 @@ public class EtlController : ControllerBase
                 ApiResponse.Error($"File size exceeds maximum limit of {EnvironmentVariables.MaxFileSizeMb}MB"));
         }
 
+        // Debug file details
+        _logger.LogInformation("File upload: Name='{FileName}', ContentType='{ContentType}', Size={Size}", 
+            file.FileName, file.ContentType, file.Length);
+            
         // Validate file type
         if (!IsValidExcelFile(file))
         {
+            _logger.LogWarning("File validation failed: Name='{FileName}', ContentType='{ContentType}'", 
+                file.FileName, file.ContentType);
             return BadRequest(ApiResponse.Error(
                 "Invalid file type. Only Excel files (.xlsx) are supported",
                 ["Supported formats: .xlsx"]));
@@ -252,11 +258,21 @@ public class EtlController : ControllerBase
         var contentType = file.ContentType?.ToLowerInvariant();
         var allowedContentTypes = new[]
         {
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "application/octet-stream", // Common fallback MIME type
+            "application/x-tika-ooxml", // Alternative detection
+            "" // Empty string fallback
         };
 
-        return allowedExtensions.Contains(extension) && 
-               (contentType != null && allowedContentTypes.Contains(contentType));
+        var extensionValid = allowedExtensions.Contains(extension);
+        var contentTypeValid = string.IsNullOrEmpty(contentType) || allowedContentTypes.Contains(contentType);
+        
+        Console.WriteLine($"DEBUG: Extension='{extension}', ExtensionValid={extensionValid}");
+        Console.WriteLine($"DEBUG: ContentType='{contentType}', ContentTypeValid={contentTypeValid}");
+        Console.WriteLine($"DEBUG: AllowedContentTypes=[{string.Join(", ", allowedContentTypes.Select(x => $"'{x}'"))}]");
+        
+        // Primarily validate by file extension, with flexible MIME type checking
+        return extensionValid && contentTypeValid;
     }
 
     private static bool IsValidFileName(string fileName)
