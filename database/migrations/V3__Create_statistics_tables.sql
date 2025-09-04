@@ -64,7 +64,7 @@ CREATE TABLE match_player_statistics (
     FOREIGN KEY (player_id) REFERENCES players(player_id),
     CONSTRAINT chk_minutes_played CHECK (minutes_played >= 0 AND minutes_played <= 120),
     CONSTRAINT chk_percentage_rates CHECK (
-        (engagement_efficiency IS NULL OR (engagement_efficiency >= 0 AND engagement_efficiency <= 1)) AND
+        (engagement_efficiency IS NULL OR (engagement_efficiency >= 0 AND engagement_efficiency <= 2.5)) AND
         (possession_success_rate IS NULL OR (possession_success_rate >= 0 AND possession_success_rate <= 1)) AND
         (conversion_rate IS NULL OR (conversion_rate >= 0 AND conversion_rate <= 1)) AND
         (tackle_percentage IS NULL OR (tackle_percentage >= 0 AND tackle_percentage <= 1)) AND
@@ -82,7 +82,7 @@ CREATE TABLE match_player_statistics (
     )
 );
 COMMENT ON TABLE match_player_statistics IS 'Individual player performance data (80+ fields per player per match)';
-COMMENT ON COLUMN match_player_statistics.engagement_efficiency IS 'Player engagement efficiency rate (0-1)';
+COMMENT ON COLUMN match_player_statistics.engagement_efficiency IS 'Player engagement efficiency rate (0-2.5)';
 COMMENT ON COLUMN match_player_statistics.possession_success_rate IS 'Success rate for possessions (0-1)';
 COMMENT ON COLUMN match_player_statistics.possessions_per_te IS 'Possessions per total engagement';
 
@@ -163,7 +163,7 @@ CREATE TABLE positional_analysis (
     FOREIGN KEY (match_id) REFERENCES matches(match_id) ON DELETE CASCADE,
     FOREIGN KEY (position_id) REFERENCES positions(position_id),
     CONSTRAINT chk_positional_percentages CHECK (
-        (avg_engagement_efficiency IS NULL OR (avg_engagement_efficiency >= 0 AND avg_engagement_efficiency <= 1)) AND
+        (avg_engagement_efficiency IS NULL OR (avg_engagement_efficiency >= 0 AND avg_engagement_efficiency <= 2.5)) AND
         (avg_possession_success_rate IS NULL OR (avg_possession_success_rate >= 0 AND avg_possession_success_rate <= 1)) AND
         (avg_conversion_rate IS NULL OR (avg_conversion_rate >= 0 AND avg_conversion_rate <= 1)) AND
         (avg_tackle_success_rate IS NULL OR (avg_tackle_success_rate >= 0 AND avg_tackle_success_rate <= 1))

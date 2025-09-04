@@ -355,7 +355,16 @@ public class ExcelParsingService : IExcelParsingService
     /// </summary>
     private bool IsPlayerStatsSheet(ExcelWorksheet worksheet)
     {
-        var sheetName = worksheet.Name.ToLowerInvariant();
+        // CRITICAL FIX: Trim whitespace from sheet name to handle trailing spaces
+        var sheetName = worksheet.Name.Trim().ToLowerInvariant();
+        
+        // ENHANCED DEBUG: Special logging for Match 1
+        var isMatch1 = worksheet.Name.StartsWith("01.");
+        if (isMatch1)
+        {
+            _logger.LogInformation("🔍 MATCH 1 DETECTION: Processing sheet '{SheetName}'", worksheet.Name);
+            _logger.LogInformation("🔍 MATCH 1 DETECTION: Trimmed/lowercase = '{TrimmedName}'", sheetName);
+        }
         
         // Check for player stats sheet indicators - more comprehensive patterns
         var playerStatsPatterns = new[] 
@@ -368,17 +377,35 @@ public class ExcelParsingService : IExcelParsingService
             "individual statistics" // Alternative naming
         };
         
+        // ENHANCED DEBUG: Check each pattern for Match 1
+        if (isMatch1)
+        {
+            foreach (var pattern in playerStatsPatterns)
+            {
+                var contains = sheetName.Contains(pattern);
+                _logger.LogInformation("🔍 MATCH 1 DETECTION: Pattern '{Pattern}' match: {Contains}", pattern, contains);
+            }
+        }
+        
         // Use case-insensitive comparison since sheetName is already lowercase
         var hasPlayerStatsIndicators = playerStatsPatterns.Any(pattern => 
             sheetName.Contains(pattern));
         
         if (hasPlayerStatsIndicators)
         {
-            _logger.LogInformation("Sheet '{SheetName}' identified as player statistics sheet", worksheet.Name);
+            if (isMatch1)
+                _logger.LogInformation("✅ MATCH 1 DETECTION: Sheet '{SheetName}' IDENTIFIED as player statistics sheet", worksheet.Name);
+            else
+                _logger.LogInformation("Sheet '{SheetName}' (trimmed: '{TrimmedName}') identified as player statistics sheet", 
+                    worksheet.Name, sheetName);
             return true;
         }
         
-        _logger.LogDebug("Sheet '{SheetName}' NOT identified as player statistics sheet", worksheet.Name);
+        if (isMatch1)
+            _logger.LogWarning("❌ MATCH 1 DETECTION: Sheet '{SheetName}' NOT identified as player statistics sheet", worksheet.Name);
+        else
+            _logger.LogDebug("Sheet '{SheetName}' (trimmed: '{TrimmedName}') NOT identified as player statistics sheet", 
+                worksheet.Name, sheetName);
         return false;
     }
 

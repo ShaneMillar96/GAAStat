@@ -51,13 +51,26 @@ public class PlayerStatisticsData
     
     /// <summary>
     /// Whether this player has any statistics (not all zeros)
+    /// CRITICAL FIX: Made less restrictive to include players with minimal stats
     /// </summary>
     public bool HasStatistics => 
         Statistics.TotalEngagements > 0 ||
         Statistics.TotalPossessions > 0 ||
         Statistics.Goals > 0 ||
         Statistics.Points > 0 ||
-        Statistics.TacklesTotal > 0;
+        Statistics.TacklesTotal > 0 ||
+        Statistics.MinutesPlayed > 0 ||
+        Statistics.TurnoversWon > 0 ||
+        Statistics.Interceptions > 0 ||
+        Statistics.ShotsTotal > 0 ||
+        Statistics.Wides > 0 ||
+        Statistics.KickoutsTotal > 0 ||
+        Statistics.Saves > 0 ||
+        // Include players with calculated rates even if base stats are zero
+        (Statistics.EngagementEfficiency.HasValue && Statistics.EngagementEfficiency > 0) ||
+        (Statistics.PossessionSuccessRate.HasValue && Statistics.PossessionSuccessRate > 0) ||
+        // Include players who participated but have minimal recorded stats (not completely empty)
+        !string.IsNullOrWhiteSpace(PlayerName);
 }
 
 /// <summary>

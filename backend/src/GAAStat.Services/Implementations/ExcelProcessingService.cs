@@ -65,6 +65,10 @@ public class ExcelProcessingService : IExcelProcessingService
 
         try
         {
+            // CRITICAL FIX: Add overall timeout to prevent jobs hanging indefinitely
+            using var overallTimeoutSource = new CancellationTokenSource(TimeSpan.FromMinutes(30));
+            var overallCancellationToken = overallTimeoutSource.Token;
+            
             // Phase 1: Initialize processing
             await RecordProgress(jobId, EtlStages.INITIALIZING, "Starting ETL processing", 10, 0);
             await _progressService.MarkJobStartedAsync(jobId);
@@ -194,12 +198,29 @@ public class ExcelProcessingService : IExcelProcessingService
 
             return ServiceResult<ExcelProcessingResult>.Success(result);
         }
+        catch (OperationCanceledException ex) when (ex.CancellationToken.IsCancellationRequested)
+        {
+            stopwatch.Stop();
+            _logger.LogError("ETL processing timed out after 30 minutes for job {JobId} file {FileName}", jobId, fileName);
+            
+            await _progressService.UpdateEtlJobStatusAsync(jobId, EtlJobStatus.FAILED, "ETL processing timed out after 30 minutes");
+            return ServiceResult<ExcelProcessingResult>.Failed("ETL processing timed out after 30 minutes");
+        }
         catch (Exception ex)
         {
             stopwatch.Stop();
             _logger.LogError(ex, "Failed to process Excel file {FileName} for job {JobId}", fileName, jobId);
             
-            await _progressService.UpdateEtlJobStatusAsync(jobId, EtlJobStatus.FAILED, ex.Message);
+            // CRITICAL FIX: Always mark job as failed when exception occurs
+            try
+            {
+                await _progressService.UpdateEtlJobStatusAsync(jobId, EtlJobStatus.FAILED, ex.Message);
+            }
+            catch (Exception statusUpdateEx)
+            {
+                _logger.LogError(statusUpdateEx, "Failed to update job status to failed for job {JobId}", jobId);
+            }
+            
             return ServiceResult<ExcelProcessingResult>.Failed($"ETL processing failed: {ex.Message}");
         }
     }
@@ -904,8 +925,8 @@ public class ExcelProcessingService : IExcelProcessingService
                 _logger.LogInformation("✅ Successfully saved {StatsCreated} player statistics for match ID {MatchId} from sheet '{SheetName}' at {EndTime}, Duration: {Duration}ms", 
                     statsCreated, matchId.Value, sheet.Name, saveEndTime, (saveEndTime - saveStartTime).TotalMilliseconds);
 
-                _logger.LogInformation("Created {StatsCount} player statistics records for sheet {SheetName}", 
-                    statsCreated, sheet.Name);
+                _logger.LogInformation("📊 SHEET SUMMARY for {SheetName}: {StatsCreated} player statistics created, {PlayersProcessed} players processed, {PlayersSkipped} players skipped", 
+                    sheet.Name, statsCreated, playerStatistics.Count, playerStatistics.Count - statsCreated);
                 
                 var sheetEndTime = DateTime.UtcNow;
                 _logger.LogInformation("🏁 Completed processing sheet {SheetIndex}/{TotalSheets}: '{SheetName}' at {EndTime}, Total Duration: {Duration}ms", 
@@ -956,40 +977,105 @@ public class ExcelProcessingService : IExcelProcessingService
     /// </summary>
     private int? FindMatchIdForPlayerStatsSheet(string playerStatsSheetName, Dictionary<string, int> matchIdMap)
     {
-        _logger.LogInformation("🔍 FindMatchIdForPlayerStatsSheet called for: '{PlayerStatsSheet}'", playerStatsSheetName);
+        // CRITICAL FIX: Trim whitespace from sheet name to handle trailing spaces
+        var trimmedPlayerStatsSheetName = playerStatsSheetName.Trim();
+        
+        // ENHANCED DEBUG: Special logging for Match 1
+        var isMatch1 = playerStatsSheetName.StartsWith("01.");
+        if (isMatch1)
+        {
+            _logger.LogInformation("🔍 MATCH 1 MATCHING: FindMatchIdForPlayerStatsSheet called for: '{PlayerStatsSheet}'", playerStatsSheetName);
+            _logger.LogInformation("🔍 MATCH 1 MATCHING: Trimmed name: '{TrimmedName}'", trimmedPlayerStatsSheetName);
+        }
+        else
+        {
+            _logger.LogInformation("🔍 FindMatchIdForPlayerStatsSheet called for: '{PlayerStatsSheet}' (trimmed: '{TrimmedName}')", 
+                playerStatsSheetName, trimmedPlayerStatsSheetName);
+        }
         
         // Extract sheet number from player stats sheet (primary matching approach)
-        var playerStatsSheetNumber = ExtractSheetNumber(playerStatsSheetName);
-        _logger.LogInformation("🔢 Extracted sheet number from player stats sheet: '{SheetNumber}'", playerStatsSheetNumber ?? "NULL");
+        var playerStatsSheetNumber = ExtractSheetNumber(trimmedPlayerStatsSheetName);
+        
+        if (isMatch1)
+        {
+            _logger.LogInformation("🔍 MATCH 1 MATCHING: Extracted sheet number: '{SheetNumber}'", playerStatsSheetNumber ?? "NULL");
+        }
+        else
+        {
+            _logger.LogInformation("🔢 Extracted sheet number from player stats sheet: '{SheetNumber}'", playerStatsSheetNumber ?? "NULL");
+        }
         
         // First try: match by sheet number prefix (most reliable approach)
         // "08. Player stats vs Magilligan" matches "08. Drum vs Magilligan"
         if (!string.IsNullOrEmpty(playerStatsSheetNumber))
         {
-            _logger.LogInformation("🔍 Trying sheet number matching with number: '{SheetNumber}'", playerStatsSheetNumber);
+            if (isMatch1)
+            {
+                _logger.LogInformation("🔍 MATCH 1 MATCHING: Trying to match sheet number '{SheetNumber}' with available matches:", playerStatsSheetNumber);
+                foreach (var kvp in matchIdMap)
+                {
+                    _logger.LogInformation("🔍 MATCH 1 MATCHING: Available match sheet: '{MatchSheet}' -> ID {MatchId}", kvp.Key, kvp.Value);
+                }
+            }
+            else
+            {
+                _logger.LogInformation("🔍 Trying sheet number matching with number: '{SheetNumber}'", playerStatsSheetNumber);
+            }
             
             foreach (var kvp in matchIdMap)
             {
-                var matchSheetName = kvp.Key;
+                var matchSheetName = kvp.Key.Trim(); // CRITICAL FIX: Also trim match sheet names
                 var matchId = kvp.Value;
                 var matchSheetNumber = ExtractSheetNumber(matchSheetName);
                 
-                _logger.LogInformation("📊 Comparing: Player sheet number '{PlayerNumber}' vs Match sheet '{MatchSheet}' number '{MatchNumber}'", 
-                    playerStatsSheetNumber, matchSheetName, matchSheetNumber ?? "NULL");
+                if (isMatch1)
+                {
+                    _logger.LogInformation("🔍 MATCH 1 MATCHING: Comparing player number '{PlayerNumber}' vs match sheet '{MatchSheet}' number '{MatchNumber}'", 
+                        playerStatsSheetNumber, matchSheetName, matchSheetNumber ?? "NULL");
+                }
+                else
+                {
+                    _logger.LogInformation("📊 Comparing: Player sheet number '{PlayerNumber}' vs Match sheet '{MatchSheet}' number '{MatchNumber}'", 
+                        playerStatsSheetNumber, matchSheetName, matchSheetNumber ?? "NULL");
+                }
                 
                 if (playerStatsSheetNumber == matchSheetNumber)
                 {
-                    _logger.LogInformation("✅ MATCH FOUND! Mapped player stats sheet '{PlayerStatsSheet}' to match sheet '{MatchSheet}' (Match ID: {MatchId}) via sheet number match ({SheetNumber})", 
-                        playerStatsSheetName, matchSheetName, matchId, playerStatsSheetNumber);
+                    if (isMatch1)
+                    {
+                        _logger.LogInformation("✅ MATCH 1 MATCHING SUCCESS! Mapped '{PlayerStatsSheet}' to '{MatchSheet}' (ID: {MatchId}) via number '{SheetNumber}'", 
+                            trimmedPlayerStatsSheetName, matchSheetName, matchId, playerStatsSheetNumber);
+                    }
+                    else
+                    {
+                        _logger.LogInformation("✅ MATCH FOUND! Mapped player stats sheet '{PlayerStatsSheet}' to match sheet '{MatchSheet}' (Match ID: {MatchId}) via sheet number match ({SheetNumber})", 
+                            trimmedPlayerStatsSheetName, matchSheetName, matchId, playerStatsSheetNumber);
+                    }
                     return matchId;
                 }
             }
-            _logger.LogWarning("❌ No sheet number matches found for player stats sheet '{PlayerStatsSheet}' with number '{SheetNumber}'", 
-                playerStatsSheetName, playerStatsSheetNumber);
+            
+            if (isMatch1)
+            {
+                _logger.LogError("❌ MATCH 1 MATCHING FAILED! No matches found for player stats sheet '{PlayerStatsSheet}' with number '{SheetNumber}'", 
+                    trimmedPlayerStatsSheetName, playerStatsSheetNumber);
+            }
+            else
+            {
+                _logger.LogWarning("❌ No sheet number matches found for player stats sheet '{PlayerStatsSheet}' with number '{SheetNumber}'", 
+                    trimmedPlayerStatsSheetName, playerStatsSheetNumber);
+            }
         }
         else 
         {
-            _logger.LogWarning("❌ Could not extract sheet number from player stats sheet: '{PlayerStatsSheet}'", playerStatsSheetName);
+            if (isMatch1)
+            {
+                _logger.LogError("❌ MATCH 1 MATCHING: Could not extract sheet number from player stats sheet: '{PlayerStatsSheet}'", trimmedPlayerStatsSheetName);
+            }
+            else
+            {
+                _logger.LogWarning("❌ Could not extract sheet number from player stats sheet: '{PlayerStatsSheet}'", trimmedPlayerStatsSheetName);
+            }
         }
 
         // Fallback: Extract the opposition team and date from the player stats sheet name
@@ -1023,14 +1109,40 @@ public class ExcelProcessingService : IExcelProcessingService
     
     /// <summary>
     /// Extract sheet number from sheet names like "07. Player Stats vs..." or "07. Drum vs..."
+    /// CRITICAL FIX: Handle various numbering formats and whitespace
     /// </summary>
     private string? ExtractSheetNumber(string sheetName)
     {
         if (string.IsNullOrEmpty(sheetName))
             return null;
-            
-        var match = System.Text.RegularExpressions.Regex.Match(sheetName, @"^(\d{2})\.");
-        return match.Success ? match.Groups[1].Value : null;
+        
+        // CRITICAL FIX: Trim whitespace and handle various number formats
+        var trimmedSheetName = sheetName.Trim();
+        
+        // Try different number extraction patterns
+        var patterns = new[]
+        {
+            @"^(\d{2})\.",     // "01." - two digit format
+            @"^(\d{1})\.",     // "1." - single digit format  
+            @"^0*(\d+)\."      // "001." or "01." - handle leading zeros
+        };
+        
+        foreach (var pattern in patterns)
+        {
+            var match = System.Text.RegularExpressions.Regex.Match(trimmedSheetName, pattern);
+            if (match.Success)
+            {
+                // Normalize to 2-digit format for consistent matching
+                var number = int.Parse(match.Groups[1].Value);
+                var normalizedNumber = number.ToString("00");
+                _logger.LogDebug("Extracted sheet number '{Number}' (normalized: '{Normalized}') from sheet name '{SheetName}'", 
+                    match.Groups[1].Value, normalizedNumber, sheetName);
+                return normalizedNumber;
+            }
+        }
+        
+        _logger.LogWarning("Could not extract sheet number from sheet name: '{SheetName}'", sheetName);
+        return null;
     }
 
     private async Task<int> SavePlayerStatisticsAsync(
@@ -1174,7 +1286,21 @@ public class ExcelProcessingService : IExcelProcessingService
 
                 if (!playerData.HasStatistics)
                 {
-                    _logger.LogDebug("Skipping player {PlayerName} - no statistics to save", playerData.PlayerName);
+                    _logger.LogWarning("⚠️ SKIPPING PLAYER: {PlayerName} (Jersey #{JerseyNumber}) - No statistics to save. TE={TE}, TP={TP}, Goals={Goals}, Points={Points}", 
+                        playerData.PlayerName, playerData.JerseyNumber, playerData.Statistics.TotalEngagements, 
+                        playerData.Statistics.TotalPossessions, playerData.Statistics.Goals, playerData.Statistics.Points);
+                        
+                    // Record this as a validation warning to track all skipped players
+                    validationErrors.Add(new EtlValidationError
+                    {
+                        JobId = jobId,
+                        SheetName = playerData.SheetName,
+                        RowNumber = playerData.RowNumber,
+                        ErrorType = "player_skipped",
+                        ErrorMessage = $"Player {playerData.PlayerName} (#{playerData.JerseyNumber}) skipped - all statistics are zero",
+                        SuggestedFix = "Verify player participated in match or has valid statistics in Excel",
+                        CreatedAt = DateTime.UtcNow
+                    });
                     continue;
                 }
 
@@ -1386,7 +1512,21 @@ public class ExcelProcessingService : IExcelProcessingService
 
                 if (!playerData.HasStatistics)
                 {
-                    _logger.LogDebug("Skipping player {PlayerName} - no statistics to save", playerData.PlayerName);
+                    _logger.LogWarning("⚠️ SKIPPING PLAYER: {PlayerName} (Jersey #{JerseyNumber}) - No statistics to save. TE={TE}, TP={TP}, Goals={Goals}, Points={Points}", 
+                        playerData.PlayerName, playerData.JerseyNumber, playerData.Statistics.TotalEngagements, 
+                        playerData.Statistics.TotalPossessions, playerData.Statistics.Goals, playerData.Statistics.Points);
+                        
+                    // Record this as a validation warning to track all skipped players
+                    validationErrors.Add(new EtlValidationError
+                    {
+                        JobId = jobId,
+                        SheetName = playerData.SheetName,
+                        RowNumber = playerData.RowNumber,
+                        ErrorType = "player_skipped",
+                        ErrorMessage = $"Player {playerData.PlayerName} (#{playerData.JerseyNumber}) skipped - all statistics are zero",
+                        SuggestedFix = "Verify player participated in match or has valid statistics in Excel",
+                        CreatedAt = DateTime.UtcNow
+                    });
                     continue;
                 }
 
@@ -1457,13 +1597,23 @@ public class ExcelProcessingService : IExcelProcessingService
                 _logger.LogDebug("Attempting to save {StatsCount} player statistics for batch {BatchNumber} with scoped context", 
                     statsToAdd.Count, batchNumber);
 
+                // Log detailed information about what we're trying to save
+                foreach (var stat in statsToAdd.Take(3)) // Log first 3 for debugging
+                {
+                    _logger.LogDebug("Saving stat for Player ID {PlayerId}, Match ID {MatchId}, Engagement Efficiency: {EngagementEfficiency}", 
+                        stat.PlayerId, stat.MatchId, stat.EngagementEfficiency);
+                }
+
                 // Validate data before saving
                 foreach (var stat in statsToAdd)
                 {
                     ValidateStatisticsEntity(stat, validationErrors, jobId);
                 }
 
+                _logger.LogDebug("Adding {StatsCount} statistics to context", statsToAdd.Count);
                 scopedContext.MatchPlayerStatistics.AddRange(statsToAdd);
+                
+                _logger.LogDebug("Calling SaveChangesAsync for {StatsCount} statistics", statsToAdd.Count);
                 await scopedContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
                 statsCreated = statsToAdd.Count;
                 
@@ -1472,8 +1622,8 @@ public class ExcelProcessingService : IExcelProcessingService
             }
             catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
             {
-                _logger.LogError(dbEx, "Database constraint violation when saving player statistics for batch {BatchNumber} with scoped context. Inner exception: {InnerException}", 
-                    batchNumber, dbEx.InnerException?.Message);
+                _logger.LogError(dbEx, "Database constraint violation when saving player statistics for batch {BatchNumber} with scoped context. Inner exception: {InnerException}. Full exception: {FullException}", 
+                    batchNumber, dbEx.InnerException?.Message, dbEx.ToString());
                 
                 // Add detailed error for each statistic
                 foreach (var stat in statsToAdd)
@@ -1488,10 +1638,14 @@ public class ExcelProcessingService : IExcelProcessingService
                         CreatedAt = DateTime.UtcNow
                     });
                 }
+                
+                // Re-throw to surface the error to the calling code
+                throw;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Unexpected error when saving player statistics for batch {BatchNumber} with scoped context", batchNumber);
+                _logger.LogError(ex, "Unexpected error when saving player statistics for batch {BatchNumber} with scoped context. Full exception: {FullException}", 
+                    batchNumber, ex.ToString());
                 
                 validationErrors.Add(new EtlValidationError
                 {
@@ -1502,6 +1656,9 @@ public class ExcelProcessingService : IExcelProcessingService
                     SuggestedFix = "Check data integrity and constraints",
                     CreatedAt = DateTime.UtcNow
                 });
+                
+                // Re-throw to surface the error to the calling code
+                throw;
             }
         }
 
@@ -1848,7 +2005,9 @@ public class ExcelProcessingService : IExcelProcessingService
         
         // Check constraint: chk_percentage_rates
         // All percentage fields should be between 0.0 and 1.0
-        ValidatePercentageRange(stat, stat.EngagementEfficiency, nameof(stat.EngagementEfficiency), constraintViolations);
+        // UPDATED: Engagement efficiency can now be > 1.0 since we read from Excel TE/PSR column directly
+        // Excel values can exceed 1.0 (e.g., 1.5000) so we allow 0.0 to 2.0 range
+        ValidateExtendedPercentageRange(stat, stat.EngagementEfficiency, nameof(stat.EngagementEfficiency), constraintViolations, 0.0m, 2.0m);
         ValidatePercentageRange(stat, stat.PossessionSuccessRate, nameof(stat.PossessionSuccessRate), constraintViolations);
         ValidatePercentageRange(stat, stat.ConversionRate, nameof(stat.ConversionRate), constraintViolations);
         ValidatePercentageRange(stat, stat.TacklePercentage, nameof(stat.TacklePercentage), constraintViolations);
@@ -1933,6 +2092,21 @@ public class ExcelProcessingService : IExcelProcessingService
             // Use reflection to set the corrected value
             var property = typeof(MatchPlayerStatistics).GetProperty(fieldName);
             property?.SetValue(stat, clampedValue);
+        }
+    }
+
+    /// <summary>
+    /// Validates that values are within a custom range (e.g., engagement efficiency can exceed 1.0)
+    /// </summary>
+    private void ValidateExtendedPercentageRange(MatchPlayerStatistics stat, decimal? percentage, string fieldName, List<string> constraintViolations, decimal minValue, decimal maxValue)
+    {
+        if (!percentage.HasValue) return;
+        
+        var originalValue = percentage.Value;
+        
+        if (originalValue < minValue || originalValue > maxValue)
+        {
+            constraintViolations.Add($"Extended range violation: {fieldName} = {originalValue:F4} (must be {minValue:F1}-{maxValue:F1}). Player {stat.PlayerId}");
         }
     }
 

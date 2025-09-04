@@ -71,16 +71,43 @@ public class PlayerStatisticsMapper
             playerStats.ShotsTotal = ParseIntValue(rowData, ExcelColumnMappings.Shooting.SHOTS_TOTAL, 0, 20, 
                 "Total shots", rowNumber, sheetName, errors);
 
-            // Parse scores from the Scores column (format: "G-PP" or "G-PP(Nf)")
+            // CRITICAL FIX: Read Goals and Points from individual columns for better accuracy
+            // These are the actual source columns that contain the correct values
+            var directGoals = ParseIntValue(rowData, ExcelColumnMappings.Shooting.GOALS, 0, 10, 
+                "Goals", rowNumber, sheetName, errors);
+            var directPoints = ParseIntValue(rowData, ExcelColumnMappings.Shooting.POINTS, 0, 20, 
+                "Points", rowNumber, sheetName, errors);
+            
+            // Also parse from the Scores column (format: "G-PP" or "G-PP(Nf)") for validation
             var scoresText = ParseStringValue(rowData, ExcelColumnMappings.Possession.SCORES, 
                 "Scores", rowNumber, sheetName, errors);
             
             if (!string.IsNullOrEmpty(scoresText))
             {
-                var (goals, points, frees) = _transformationService.ParsePlayerScore(scoresText);
-                playerStats.Goals = goals;
-                playerStats.Points = points;
+                var (parsedGoals, parsedPoints, frees) = _transformationService.ParsePlayerScore(scoresText);
+                
+                // Use direct column values as primary source, but validate against parsed scores
+                playerStats.Goals = directGoals;
+                playerStats.Points = directPoints;
                 playerStats.Scores = scoresText; // Keep original format from Excel
+                
+                // Log discrepancies between direct columns and parsed scores
+                if (directGoals != parsedGoals || directPoints != parsedPoints)
+                {
+                    _logger.LogWarning("📊 SCORE DISCREPANCY for {PlayerName} in {SheetName} row {Row}: " +
+                        "Direct columns: {DirectGoals}-{DirectPoints}, Parsed from '{ScoreText}': {ParsedGoals}-{ParsedPoints}",
+                        ParseStringValue(rowData, ExcelColumnMappings.PlayerInfo.PLAYER_NAME, "Player name", rowNumber, sheetName, errors),
+                        sheetName, rowNumber, directGoals, directPoints, scoresText, parsedGoals, parsedPoints);
+                        
+                    errors.Add(new ValidationError
+                    {
+                        SheetName = sheetName,
+                        RowNumber = rowNumber,
+                        ErrorType = "score_discrepancy", 
+                        ErrorMessage = $"Score mismatch: Direct columns ({directGoals}-{directPoints}) vs Parsed ({parsedGoals}-{parsedPoints}) from '{scoresText}'",
+                        SuggestedFix = "Verify Goals and Points columns match Scores column format"
+                    });
+                }
                 
                 // Log if frees were detected (for analysis but not stored in main table)
                 if (frees > 0)
@@ -91,9 +118,10 @@ public class PlayerStatisticsMapper
             }
             else
             {
-                playerStats.Goals = 0;
-                playerStats.Points = 0;
-                playerStats.Scores = string.Empty;
+                // Use direct column values when no score text is available
+                playerStats.Goals = directGoals;
+                playerStats.Points = directPoints;
+                playerStats.Scores = directGoals > 0 || directPoints > 0 ? $"{directGoals}-{directPoints:00}" : string.Empty;
             }
 
             playerStats.Wides = ParseIntValue(rowData, ExcelColumnMappings.Shooting.WIDES, 0, 15, 
@@ -306,6 +334,63 @@ public class PlayerStatisticsMapper
     }
 
     /// <summary>
+    /// Parses engagement efficiency value directly from Excel without percentage conversion
+    /// Engagement efficiency is a ratio (TP + ToW + Int) / TE and can legitimately exceed 1.0
+    /// </summary>
+    private decimal? ParseEngagementEfficiency(
+        object?[] rowData, 
+        int columnIndex, 
+        string fieldName,
+        int rowNumber,
+        string sheetName,
+        List<ValidationError> errors)
+    {
+        if (columnIndex >= rowData.Length)
+        {
+            return null;
+        }
+
+        var cellValue = rowData[columnIndex]?.ToString();
+        if (string.IsNullOrWhiteSpace(cellValue))
+        {
+            return null;
+        }
+
+        // Parse the raw decimal value without any percentage conversion
+        if (decimal.TryParse(cellValue, out var decimalValue))
+        {
+            // Validate engagement efficiency is within reasonable range (0.0 to 2.5)
+            // Higher values are possible but unusual
+            if (decimalValue < 0m || decimalValue > 2.5m)
+            {
+                errors.Add(new ValidationError
+                {
+                    SheetName = sheetName,
+                    RowNumber = rowNumber,
+                    ColumnName = ExcelColumnMappings.GetExpectedHeader(columnIndex),
+                    ErrorType = "validation_warning",
+                    ErrorMessage = $"{fieldName} value {decimalValue:F4} is outside normal range (0.0-2.5)",
+                    SuggestedFix = $"Verify {fieldName} Excel calculation or data entry"
+                });
+            }
+            
+            return Math.Round(decimalValue, 4);
+        }
+
+        errors.Add(new ValidationError
+        {
+            SheetName = sheetName,
+            RowNumber = rowNumber,
+            ColumnName = ExcelColumnMappings.GetExpectedHeader(columnIndex),
+            ErrorType = EtlErrorTypes.MISSING_DATA,
+            ErrorMessage = $"Invalid {fieldName} value: '{cellValue}'. Expected decimal number.",
+            SuggestedFix = $"Enter valid decimal number for {fieldName}"
+        });
+
+        return null;
+    }
+
+    /// <summary>
     /// Calculates percentage fields based on raw statistics
     /// </summary>
     private void CalculatePercentages(
@@ -315,12 +400,10 @@ public class PlayerStatisticsMapper
         string sheetName, 
         List<ValidationError> errors)
     {
-        // Calculate engagement efficiency (successful engagements / total engagements)
-        if (playerStats.TotalEngagements > 0)
-        {
-            var successfulEngagements = playerStats.TotalPossessions + playerStats.TurnoversWon + playerStats.Interceptions;
-            playerStats.EngagementEfficiency = Math.Round((decimal)successfulEngagements / playerStats.TotalEngagements, 4);
-        }
+        // CRITICAL FIX: Read engagement efficiency directly from Excel Column E (TE/PSR) as raw ratio value
+        // Excel contains the correct engagement efficiency values as ratios that can exceed 1.0
+        playerStats.EngagementEfficiency = ParseEngagementEfficiency(rowData, ExcelColumnMappings.Possession.TE_PSR_RATIO, 
+            "Engagement efficiency", rowNumber, sheetName, errors);
 
         // Parse possession success rate from Excel if available, otherwise calculate
         playerStats.PossessionSuccessRate = ParseDecimalValue(rowData, ExcelColumnMappings.Possession.POSSESSION_SUCCESS_RATE, 
