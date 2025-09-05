@@ -10,6 +10,7 @@ public class ExcelProcessingResult
     public int SheetsProcessed { get; set; }
     public int MatchesCreated { get; set; }
     public int PlayerStatisticsCreated { get; set; }
+    public int TeamStatisticsCreated { get; set; }
     public TimeSpan ProcessingDuration { get; set; }
     public IEnumerable<string> WarningMessages { get; set; } = [];
 }

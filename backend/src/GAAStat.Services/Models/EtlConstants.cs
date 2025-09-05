@@ -23,7 +23,10 @@ public static class EtlStages
     public const string VALIDATING_DATA = "Validating Data";
     public const string SAVING_MATCHES = "Saving Matches";
     public const string SAVING_TEAM_STATS = "Saving Team Statistics";
+    public const string PROCESSING_TEAM_STATISTICS = "Processing Team Statistics";
     public const string SAVING_PLAYER_STATS = "Saving Player Statistics";
+    public const string PROCESSING_KICKOUT_ANALYSIS = "Processing Kickout Analysis";
+    public const string PROCESSING_KPI_DEFINITIONS = "Processing KPI Definitions";
     public const string SAVING_SPECIALIZED_ANALYTICS = "Saving Specialized Analytics";
     public const string FINALIZING = "Finalizing";
 }
@@ -39,6 +42,10 @@ public static class EtlErrorTypes
     public const string INVALID_SCORE = "invalid_score";
     public const string DUPLICATE_MATCH = "duplicate_match";
     public const string SHEET_STRUCTURE = "sheet_structure";
+    public const string PROCESSING_ERROR = "processing_error";
+    public const string INVALID_TIME = "invalid_time";
+    public const string INVALID_RANGE = "invalid_range";
+    public const string CONSISTENCY_ERROR = "consistency_error";
 }
 
 /// <summary>

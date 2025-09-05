@@ -14,10 +14,12 @@ public class ReferenceDataSeedResult
     public int PositionAreasSeeded { get; set; }
     public int FreeTypesSeeded { get; set; }
     public int MetricCategoriesSeeded { get; set; }
+    public int KpiDefinitionsSeeded { get; set; }
     
     public int TotalSeeded => PositionsSeeded + TimePeriodsSeeded + TeamTypesSeeded + 
                              KickoutTypesSeeded + ShotTypesSeeded + ShotOutcomesSeeded + 
-                             PositionAreasSeeded + FreeTypesSeeded + MetricCategoriesSeeded;
+                             PositionAreasSeeded + FreeTypesSeeded + MetricCategoriesSeeded + 
+                             KpiDefinitionsSeeded;
     
     public List<string> WarningMessages { get; set; } = new();
 }
@@ -136,5 +138,27 @@ public static class ReferenceDataConstants
         { "Goalkeeping", "Goalkeeper specific statistics" },
         { "Score Source", "Source of scoring opportunities" },
         { "General", "General match statistics" }
+    };
+
+    /// <summary>
+    /// Default KPI definitions for GAA statistics when Excel file doesn't contain KPI sheet
+    /// </summary>
+    public static readonly List<(string KpiCode, string KpiName, string Description, string? PositionRelevance, double? PsrValue)> DefaultKpiDefinitions = new()
+    {
+        ("1.0_won_clean", "Kickout Won Clean", "Successfully won kickout without contest", "Home", 1.0),
+        ("1.0_lost_clean", "Kickout Lost Clean", "Kickout lost without defensive challenge", "Home", 0.0),
+        ("1.0_won_contested", "Kickout Won Contested", "Won kickout after aerial contest", "Home", 1.0),
+        ("1.0_lost_contested", "Kickout Lost Contested", "Lost kickout after aerial contest", "Home", 0.0),
+        ("2.0_successful", "Attack Successful", "Attack resulted in score or scoring opportunity", "Both", 1.0),
+        ("2.0_breakdown", "Attack Breakdown", "Attack broke down without scoring chance", "Both", 0.0),
+        ("3.0_tackle_won", "Tackle Won", "Successfully won possession through tackle", "Both", 1.0),
+        ("3.0_tackle_lost", "Tackle Lost", "Failed tackle attempt, opponent retained possession", "Both", 0.0),
+        ("4.0_turnover_forced", "Turnover Forced", "Forced opponent to lose possession", "Both", 1.0),
+        ("4.0_turnover_conceded", "Turnover Conceded", "Lost possession through opponent action", "Both", 0.0),
+        ("5.0_shot_goal", "Shot Goal", "Shot attempt resulting in goal", "Both", 1.0),
+        ("5.0_shot_point", "Shot Point", "Shot attempt resulting in point", "Both", 1.0),
+        ("5.0_shot_miss", "Shot Miss", "Shot attempt that missed target", "Both", 0.0),
+        ("6.0_pass_completed", "Pass Completed", "Successful pass to teammate", "Both", 1.0),
+        ("6.0_pass_intercepted", "Pass Intercepted", "Pass intercepted by opposition", "Both", 0.0)
     };
 }

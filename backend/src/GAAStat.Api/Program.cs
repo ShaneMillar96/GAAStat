@@ -24,6 +24,8 @@ builder.Services.AddScoped<GAAStat.Services.Interfaces.IProgressTrackingService,
 builder.Services.AddScoped<GAAStat.Services.Interfaces.IExcelParsingService, GAAStat.Services.Implementations.ExcelParsingService>();
 builder.Services.AddScoped<GAAStat.Services.Interfaces.IDataTransformationService, GAAStat.Services.Implementations.DataTransformationService>();
 builder.Services.AddScoped<GAAStat.Services.Interfaces.IReferenceDataSeedingService, GAAStat.Services.Implementations.ReferenceDataSeedingService>();
+// REMOVED: KPI definitions processing service (feature removed as not essential)
+// builder.Services.AddScoped<GAAStat.Services.Interfaces.IKpiDefinitionsProcessingService, GAAStat.Services.Implementations.KpiDefinitionsProcessingService>();
 
 // Add memory caching for analytics performance
 builder.Services.AddMemoryCache();

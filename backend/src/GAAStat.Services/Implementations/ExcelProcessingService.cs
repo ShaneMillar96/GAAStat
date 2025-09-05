@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -20,6 +21,7 @@ public class ExcelProcessingService : IExcelProcessingService
     private readonly IProgressTrackingService _progressService;
     private readonly IDataTransformationService _transformationService;
     private readonly IReferenceDataSeedingService _referenceDataService;
+    // REMOVED: private readonly IKpiDefinitionsProcessingService _kpiDefinitionsService;
     private readonly GAAStatDbContext _context;
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<ExcelProcessingService> _logger;
@@ -29,6 +31,7 @@ public class ExcelProcessingService : IExcelProcessingService
         IProgressTrackingService progressService,
         IDataTransformationService transformationService,
         IReferenceDataSeedingService referenceDataService,
+        // REMOVED: IKpiDefinitionsProcessingService kpiDefinitionsService,
         GAAStatDbContext context,
         IServiceProvider serviceProvider,
         ILogger<ExcelProcessingService> logger)
@@ -37,6 +40,7 @@ public class ExcelProcessingService : IExcelProcessingService
         _progressService = progressService;
         _transformationService = transformationService;
         _referenceDataService = referenceDataService;
+        // REMOVED: _kpiDefinitionsService = kpiDefinitionsService;
         _context = context;
         _serviceProvider = serviceProvider;
         _logger = logger;
@@ -164,17 +168,52 @@ public class ExcelProcessingService : IExcelProcessingService
 
             var playerStatsCreated = playerStatsResult.Data;
 
-            // Phase 9: Process KPI definitions (temporarily disabled due to compilation errors)
-            await RecordProgress(jobId, EtlStages.SAVING_SPECIALIZED_ANALYTICS, "Processing KPI definitions", 10, 8);
-            // await ProcessKpiDefinitionsAsync(fileStream, fileName, jobId);
+            // Phase 9: REMOVED - KPI definitions processing (not essential for now)
+            // await RecordProgress(jobId, EtlStages.PROCESSING_KPI_DEFINITIONS, "Processing KPI definitions", 10, 8);
+            // await ProcessKpiDefinitionsAsync(fileStream, jobId);
+            _logger.LogInformation("KPI definitions processing has been removed from the ETL pipeline");
             
-            // Phase 10: Process team statistics (placeholder for future implementation)
-            await RecordProgress(jobId, EtlStages.SAVING_TEAM_STATS, "Processing team statistics", 10, 9);
-            // TODO: Implement team statistics processing
+            // Phase 10: Process team statistics 
+            await RecordProgress(jobId, EtlStages.PROCESSING_TEAM_STATISTICS, "Processing team statistics", 10, 9);
             
-            // Phase 11: Process specialized analytics (placeholder for future implementation)
-            await RecordProgress(jobId, EtlStages.SAVING_SPECIALIZED_ANALYTICS, "Processing specialized analytics", 10, 10);
-            // TODO: Implement kickout, shot, and scoreable free analysis processing
+            var teamSheets = analysis.Sheets.Where(IsTeamMatchStatsSheet).ToList();
+            var teamStatsResult = await ProcessTeamStatisticsAsync(fileStream, teamSheets, matchIdMap, jobId, overallCancellationToken);
+            
+            if (!teamStatsResult.IsSuccess)
+            {
+                _logger.LogWarning("Team statistics processing failed: {Error}", teamStatsResult.ErrorMessage);
+                warningMessages.Add($"Team statistics processing incomplete: {teamStatsResult.ErrorMessage}");
+            }
+            
+            var teamStatsCreated = teamStatsResult.IsSuccess ? teamStatsResult.Data.TotalStatisticsCreated : 0;
+            
+            // Phase 11: Process specialized analytics (DISABLED - Kickout analysis removed due to processing issues)
+            // await RecordProgress(jobId, EtlStages.PROCESSING_KICKOUT_ANALYSIS, "Processing kickout analysis", 10, 10);
+            
+            // DISABLED: Kickout analysis processing - complex visual layout not suitable for automated parsing
+            // Process kickout analysis if sheets exist
+            // fileStream.Position = 0; // Reset stream for kickout analysis
+            // var kickoutResult = await ProcessKickoutAnalysisAsync(fileStream, jobId, overallCancellationToken);
+            // if (kickoutResult.IsSuccess && kickoutResult.Data != null)
+            // {
+            //     _logger.LogInformation("Kickout analysis completed: {EventsExtracted} events, {RecordsCreated} records", 
+            //         kickoutResult.Data.EventsExtracted, kickoutResult.Data.RecordsCreated);
+            //     
+            //     // Add any warnings from kickout processing
+            //     if (kickoutResult.Data.WarningMessages.Any())
+            //     {
+            //         warningMessages.AddRange(kickoutResult.Data.WarningMessages);
+            //     }
+            // }
+            // else if (!kickoutResult.IsSuccess)
+            // {
+            //     _logger.LogWarning("Kickout analysis failed: {ErrorMessage}", kickoutResult.ErrorMessage);
+            //     warningMessages.Add($"Kickout analysis processing failed: {kickoutResult.ErrorMessage}");
+            // }
+            
+            _logger.LogInformation("Kickout analysis processing has been disabled due to complex visual layout in Excel sheets");
+            
+            // TODO: Implement shot and scoreable free analysis processing
 
             // Phase 12: Finalize
             await RecordProgress(jobId, EtlStages.FINALIZING, "Finalizing ETL process", 10, 11);
@@ -189,6 +228,7 @@ public class ExcelProcessingService : IExcelProcessingService
                 SheetsProcessed = analysis.Sheets.Count(s => s.ContainsMatchData),
                 MatchesCreated = matchesCreated,
                 PlayerStatisticsCreated = playerStatsCreated,
+                TeamStatisticsCreated = teamStatsCreated,
                 ProcessingDuration = stopwatch.Elapsed,
                 WarningMessages = warningMessages
             };
@@ -1144,6 +1184,77 @@ public class ExcelProcessingService : IExcelProcessingService
         _logger.LogWarning("Could not extract sheet number from sheet name: '{SheetName}'", sheetName);
         return null;
     }
+
+    /* REMOVED: KPI definitions processing method (not essential for now)
+    /// <summary>
+    /// Process KPI definitions from Excel worksheet
+    /// Finds "KPI Definitions" sheet and processes hierarchical data structure
+    /// </summary>
+    private async Task ProcessKpiDefinitionsAsync(
+        Stream fileStream, 
+        int jobId)
+    {
+        try
+        {
+            _logger.LogInformation("Loading Excel package to search for KPI Definitions sheet");
+
+            // Reset stream position and load Excel package
+            fileStream.Position = 0;
+            ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
+            using var package = new ExcelPackage(fileStream);
+
+            // Find KPI Definitions sheet (case-insensitive)
+            var kpiDefinitionsSheet = package.Workbook.Worksheets
+                .FirstOrDefault(w => w.Name.Contains("KPI Definitions", StringComparison.OrdinalIgnoreCase) ||
+                                   w.Name.Contains("KPI Definition", StringComparison.OrdinalIgnoreCase));
+
+            if (kpiDefinitionsSheet == null)
+            {
+                _logger.LogWarning("No KPI Definitions sheet found in Excel file. Skipping KPI processing.");
+                
+                await _progressService.RecordValidationErrorAsync(
+                    jobId, "KPI Definitions", null, null,
+                    EtlErrorTypes.SHEET_STRUCTURE,
+                    "KPI Definitions sheet not found in Excel file",
+                    "Add a sheet named 'KPI Definitions' with the required structure");
+                
+                return;
+            }
+
+            _logger.LogInformation("Found KPI Definitions sheet: '{SheetName}'", kpiDefinitionsSheet.Name);
+
+            // Process the KPI definitions using the dedicated service
+            var result = await _kpiDefinitionsService.ProcessKpiDefinitionsAsync(
+                kpiDefinitionsSheet, jobId, CancellationToken.None);
+
+            if (result.IsSuccess)
+            {
+                _logger.LogInformation("Successfully processed KPI definitions: {Summary}", 
+                    result.Data?.GetSummary() ?? "No summary available");
+            }
+            else
+            {
+                _logger.LogError("KPI definitions processing failed: {ErrorMessage}", result.ErrorMessage);
+                
+                await _progressService.RecordValidationErrorAsync(
+                    jobId, kpiDefinitionsSheet.Name, null, null,
+                    EtlErrorTypes.PROCESSING_ERROR,
+                    $"KPI definitions processing failed: {result.ErrorMessage}",
+                    "Review KPI definitions sheet structure and data");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to process KPI definitions for job {JobId}", jobId);
+            
+            await _progressService.RecordValidationErrorAsync(
+                jobId, "KPI Definitions", null, null,
+                EtlErrorTypes.PROCESSING_ERROR,
+                $"KPI definitions processing exception: {ex.Message}",
+                "Review Excel file structure and KPI definitions service implementation");
+        }
+    }
+    */ // END REMOVED: KPI definitions processing method
 
     private async Task<int> SavePlayerStatisticsAsync(
         int jobId,
@@ -2111,6 +2222,1086 @@ public class ExcelProcessingService : IExcelProcessingService
     }
 
     // KPI processing methods temporarily removed to fix compilation errors
+
+    #endregion
+
+    /* DISABLED: Kickout Analysis Processing - Complex visual layout not suitable for automated parsing
+    #region Kickout Analysis Processing
+
+    /// <summary>
+    /// Processes kickout analysis data from the Excel file
+    /// Extracts dual-column event data and creates aggregated analysis records
+    /// </summary>
+    public async Task<ServiceResult<KickoutAnalysisResult>> ProcessKickoutAnalysisAsync(
+        Stream fileStream, 
+        int jobId, 
+        CancellationToken cancellationToken = default)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        var result = new KickoutAnalysisResult();
+
+        try
+        {
+            _logger.LogInformation("Starting kickout analysis processing for job: {JobId}", jobId);
+
+            // Reset stream position and load Excel package
+            fileStream.Position = 0;
+            ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
+            using var package = new ExcelPackage(fileStream);
+
+            // Find kickout analysis sheets
+            var kickoutSheets = package.Workbook.Worksheets
+                .Where(w => IsKickoutAnalysisSheet(w.Name))
+                .ToList();
+
+            if (!kickoutSheets.Any())
+            {
+                _logger.LogWarning("No kickout analysis sheets found for job: {JobId}", jobId);
+                return ServiceResult<KickoutAnalysisResult>.Success(result);
+            }
+
+            _logger.LogInformation("Found {SheetCount} kickout analysis sheet(s) to process", kickoutSheets.Count);
+
+            // Process each kickout analysis sheet
+            foreach (var worksheet in kickoutSheets)
+            {
+                var sheetResult = await ProcessKickoutAnalysisSheetAsync(worksheet, cancellationToken);
+                if (sheetResult.IsSuccess && sheetResult.Data != null)
+                {
+                    result.EventsExtracted += sheetResult.Data.EventsExtracted;
+                    result.RecordsCreated += sheetResult.Data.RecordsCreated;
+                    result.ProcessedRows += sheetResult.Data.ProcessedRows;
+                    result.SkippedRows += sheetResult.Data.SkippedRows;
+                    result.WarningMessages.AddRange(sheetResult.Data.WarningMessages);
+                }
+                else
+                {
+                    _logger.LogWarning("Failed to process kickout analysis sheet {SheetName}: {Error}", 
+                        worksheet.Name, sheetResult.ErrorMessage);
+                    result.WarningMessages.Add($"Sheet {worksheet.Name}: {sheetResult.ErrorMessage}");
+                }
+            }
+
+            result.ProcessingTimeMs = stopwatch.ElapsedMilliseconds;
+            _logger.LogInformation("Completed kickout analysis processing - Events: {Events}, Records: {Records}, Time: {TimeMs}ms", 
+                result.EventsExtracted, result.RecordsCreated, result.ProcessingTimeMs);
+
+            return ServiceResult<KickoutAnalysisResult>.Success(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to process kickout analysis for job: {JobId}", jobId);
+            return ServiceResult<KickoutAnalysisResult>.Failed($"Kickout analysis processing failed: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Determines if a sheet contains kickout analysis data
+    /// </summary>
+    private static bool IsKickoutAnalysisSheet(string sheetName)
+    {
+        if (string.IsNullOrWhiteSpace(sheetName))
+            return false;
+
+        var lowerSheetName = sheetName.ToLowerInvariant().Trim();
+        return lowerSheetName.Contains("kickout analysis") || 
+               lowerSheetName.Contains("kick-out analysis") ||
+               lowerSheetName.Contains("kickout_analysis");
+    }
+
+    /// <summary>
+    /// Processes a single kickout analysis sheet
+    /// </summary>
+    private async Task<ServiceResult<KickoutAnalysisResult>> ProcessKickoutAnalysisSheetAsync(
+        ExcelWorksheet worksheet, 
+        CancellationToken cancellationToken)
+    {
+        var result = new KickoutAnalysisResult();
+        var events = new List<KickoutEvent>();
+        
+        try
+        {
+            _logger.LogInformation("Processing kickout analysis sheet: {SheetName}", worksheet.Name);
+
+            // Extract match information from sheet name or data
+            var matchId = await ResolveMatchIdFromSheetAsync(worksheet);
+            if (!matchId.HasValue)
+            {
+                return ServiceResult<KickoutAnalysisResult>.Failed("Could not resolve match ID for kickout analysis");
+            }
+
+            // Process rows to extract events
+            var lastRow = worksheet.Dimension?.End?.Row ?? 0;
+            for (int row = 2; row <= lastRow; row++) // Skip header row
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var rowEvents = ProcessKickoutRow(worksheet, row);
+                if (rowEvents.Any())
+                {
+                    events.AddRange(rowEvents);
+                    result.ProcessedRows++;
+                }
+                else
+                {
+                    result.SkippedRows++;
+                }
+            }
+
+            result.EventsExtracted = events.Count;
+
+            if (events.Any())
+            {
+                // Aggregate and save data
+                var aggregatedData = await AggregateKickoutDataAsync(events, matchId.Value);
+                var savedRecords = await SaveKickoutAnalysisAsync(aggregatedData, cancellationToken);
+                result.RecordsCreated = savedRecords;
+            }
+
+            _logger.LogInformation("Processed kickout sheet {SheetName}: {Events} events, {Records} records created", 
+                worksheet.Name, result.EventsExtracted, result.RecordsCreated);
+
+            return ServiceResult<KickoutAnalysisResult>.Success(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to process kickout analysis sheet: {SheetName}", worksheet.Name);
+            return ServiceResult<KickoutAnalysisResult>.Failed($"Sheet processing failed: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Processes a single Excel row to extract kickout events for both teams
+    /// </summary>
+    private List<KickoutEvent> ProcessKickoutRow(ExcelWorksheet worksheet, int row)
+    {
+        var events = new List<KickoutEvent>();
+
+        try
+        {
+            // Process Drum team data (columns 1-10)
+            var drumEvent = ExtractKickoutEventFromColumns(worksheet, row, KickoutColumnMapping.DrumColumns, "Drum", false);
+            if (drumEvent != null)
+            {
+                events.Add(drumEvent);
+            }
+
+            // Process Opposition team data (columns 11-21)
+            var oppositionEvent = ExtractKickoutEventFromColumns(worksheet, row, KickoutColumnMapping.OppositionColumns, "Opposition", true);
+            if (oppositionEvent != null)
+            {
+                events.Add(oppositionEvent);
+            }
+
+            return events;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to process kickout row {Row}", row);
+            return events;
+        }
+    }
+
+    /// <summary>
+    /// Extracts a kickout event from specific columns in a row
+    /// </summary>
+    private KickoutEvent? ExtractKickoutEventFromColumns(
+        ExcelWorksheet worksheet, 
+        int row, 
+        KickoutColumnMapping.ColumnSet columns, 
+        string teamName, 
+        bool isOpposition)
+    {
+        try
+        {
+            // Check if row has data (at least event number or time)
+            var eventNumberCell = worksheet.Cells[row, columns.EventNumber].Value;
+            var timeCell = worksheet.Cells[row, columns.Time].Value;
+            
+            if (eventNumberCell == null && timeCell == null)
+                return null;
+
+            return new KickoutEvent
+            {
+                EventNumber = ParseEventNumber(eventNumberCell),
+                Time = ParseTime(timeCell),
+                Period = ParsePeriod(worksheet.Cells[row, columns.Period].Value),
+                TeamName = teamName,
+                KickoutType = worksheet.Cells[row, columns.KickoutType].Value?.ToString()?.Trim() ?? string.Empty,
+                Outcome = worksheet.Cells[row, columns.Outcome].Value?.ToString()?.Trim() ?? string.Empty,
+                Player = worksheet.Cells[row, columns.Player].Value?.ToString()?.Trim(),
+                Location = ParseLocation(worksheet.Cells[row, columns.Location].Value),
+                Competition = worksheet.Cells[row, columns.Competition].Value?.ToString()?.Trim(),
+                Teams = worksheet.Cells[row, columns.Teams].Value?.ToString()?.Trim(),
+                IsOpposition = isOpposition
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to extract kickout event from row {Row}, columns {TeamName}", row, teamName);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Parses event number from Excel cell value
+    /// </summary>
+    private int? ParseEventNumber(object? cellValue)
+    {
+        if (cellValue == null) return null;
+
+        if (int.TryParse(cellValue.ToString(), out var eventNumber))
+            return eventNumber;
+
+        return null;
+    }
+
+    /// <summary>
+    /// Parses time value from Excel cell
+    /// </summary>
+    private TimeSpan? ParseTime(object? cellValue)
+    {
+        if (cellValue == null) return null;
+
+        // Handle DateTime (Excel time format)
+        if (cellValue is DateTime dateTime)
+        {
+            return dateTime.TimeOfDay;
+        }
+
+        // Handle TimeSpan
+        if (cellValue is TimeSpan timeSpan)
+        {
+            return timeSpan;
+        }
+
+        // Handle string formats like "15:30" or "15.30"
+        if (cellValue is string timeString && !string.IsNullOrWhiteSpace(timeString))
+        {
+            timeString = timeString.Trim().Replace(".", ":");
+            if (TimeSpan.TryParse(timeString, out var parsedTime))
+                return parsedTime;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Parses period value (1 = First Half, 2 = Second Half)
+    /// </summary>
+    private int ParsePeriod(object? cellValue)
+    {
+        if (cellValue == null) return 1; // Default to first half
+
+        if (int.TryParse(cellValue.ToString(), out var period))
+        {
+            return period >= 1 && period <= 2 ? period : 1;
+        }
+
+        // Handle text values
+        var periodText = cellValue.ToString()?.ToLowerInvariant().Trim();
+        return periodText switch
+        {
+            "1" or "first" or "first half" or "h1" => 1,
+            "2" or "second" or "second half" or "h2" => 2,
+            _ => 1
+        };
+    }
+
+    /// <summary>
+    /// Parses location value from Excel cell
+    /// </summary>
+    private int? ParseLocation(object? cellValue)
+    {
+        if (cellValue == null) return null;
+
+        if (int.TryParse(cellValue.ToString(), out var location))
+            return location;
+
+        return null;
+    }
+
+    /// <summary>
+    /// Resolves match ID from worksheet data or sheet name
+    /// </summary>
+    private async Task<int?> ResolveMatchIdFromSheetAsync(ExcelWorksheet worksheet)
+    {
+        try
+        {
+            // Try to extract teams from first data row
+            var teamsCell = worksheet.Cells[2, KickoutColumnMapping.DrumColumns.Teams].Value?.ToString();
+            if (!string.IsNullOrWhiteSpace(teamsCell))
+            {
+                var matchId = await ResolveMatchIdFromTeamsAsync(teamsCell);
+                if (matchId.HasValue)
+                    return matchId;
+            }
+
+            // Fallback: try to extract from sheet name
+            var (homeTeam, awayTeam) = _transformationService.ExtractMatchTeams(worksheet.Name);
+            if (!string.IsNullOrWhiteSpace(homeTeam) && !string.IsNullOrWhiteSpace(awayTeam))
+            {
+                var teamsString = $"{homeTeam} vs {awayTeam}";
+                return await ResolveMatchIdFromTeamsAsync(teamsString);
+            }
+
+            _logger.LogWarning("Could not resolve match ID for kickout analysis sheet: {SheetName}", worksheet.Name);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to resolve match ID for worksheet: {SheetName}", worksheet.Name);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Resolves match ID from team names string
+    /// </summary>
+    private async Task<int?> ResolveMatchIdFromTeamsAsync(string teamsString)
+    {
+        try
+        {
+            // Extract team names from string like "Drum vs Glack"
+            var (homeTeam, awayTeam) = _transformationService.ExtractMatchTeams(teamsString);
+            
+            if (string.IsNullOrWhiteSpace(homeTeam) || string.IsNullOrWhiteSpace(awayTeam))
+                return null;
+
+            // Find match by team names
+            var match = await _context.Matches
+                .Include(m => m.Competition)
+                .Include(m => m.Opposition)
+                .FirstOrDefaultAsync(m => 
+                    (homeTeam.ToLower().Contains("drum") || homeTeam.ToLower().Contains(GaaConstants.DEFAULT_HOME_TEAM.ToLower())) &&
+                    m.Opposition.TeamName.ToLowerInvariant().Contains(awayTeam.ToLowerInvariant()))
+                .ConfigureAwait(false);
+
+            return match?.MatchId;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to resolve match ID from teams: {TeamsString}", teamsString);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Aggregates kickout events into analysis records
+    /// </summary>
+    private async Task<List<KickoutAnalysisRecord>> AggregateKickoutDataAsync(List<KickoutEvent> events, int matchId)
+    {
+        var aggregatedData = new List<KickoutAnalysisRecord>();
+
+        try
+        {
+            // Group by team, period, and kickout type
+            var groups = events
+                .Where(e => !string.IsNullOrWhiteSpace(e.KickoutType))
+                .GroupBy(e => new { 
+                    e.TeamName, 
+                    e.Period, 
+                    e.KickoutType,
+                    e.IsOpposition 
+                });
+
+            foreach (var group in groups)
+            {
+                var eventsList = group.ToList();
+                var totalAttempts = eventsList.Count;
+                var successful = CountSuccessfulKickouts(eventsList);
+                var successRate = totalAttempts > 0 ? (decimal)successful / totalAttempts : 0m;
+                var outcomeBreakdown = CreateOutcomeBreakdown(eventsList);
+
+                // Get lookup IDs asynchronously
+                var timePeriodId = await GetTimePeriodIdAsync(group.Key.Period);
+                var kickoutTypeId = await GetKickoutTypeIdAsync(group.Key.KickoutType);
+                var teamTypeId = await GetTeamTypeIdAsync(group.Key.TeamName, group.Key.IsOpposition);
+
+                var record = new KickoutAnalysisRecord
+                {
+                    MatchId = matchId,
+                    TimePeriodId = timePeriodId,
+                    KickoutTypeId = kickoutTypeId,
+                    TeamTypeId = teamTypeId,
+                    TotalAttempts = totalAttempts,
+                    Successful = successful,
+                    SuccessRate = successRate,
+                    OutcomeBreakdown = outcomeBreakdown
+                };
+
+                aggregatedData.Add(record);
+            }
+
+            _logger.LogInformation("Aggregated {EventCount} events into {RecordCount} analysis records", 
+                events.Count, aggregatedData.Count);
+
+            return aggregatedData;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to aggregate kickout data");
+            return aggregatedData;
+        }
+    }
+
+    /// <summary>
+    /// Counts successful kickouts based on outcome
+    /// </summary>
+    private int CountSuccessfulKickouts(List<KickoutEvent> events)
+    {
+        var successfulOutcomes = new[] { "won clean", "break won", "retained" };
+        return events.Count(e => successfulOutcomes.Any(outcome => 
+            e.Outcome.ToLowerInvariant().Contains(outcome)));
+    }
+
+    /// <summary>
+    /// Creates JSON outcome breakdown
+    /// </summary>
+    private string CreateOutcomeBreakdown(List<KickoutEvent> events)
+    {
+        var outcomes = events
+            .GroupBy(e => NormalizeOutcome(e.Outcome))
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        return System.Text.Json.JsonSerializer.Serialize(outcomes);
+    }
+
+    /// <summary>
+    /// Normalizes outcome text for consistent grouping
+    /// </summary>
+    private string NormalizeOutcome(string outcome)
+    {
+        if (string.IsNullOrWhiteSpace(outcome))
+            return "unknown";
+
+        var normalized = outcome.ToLowerInvariant().Trim();
+        return normalized switch
+        {
+            var s when s.Contains("won clean") => "won_clean",
+            var s when s.Contains("break won") => "break_won",
+            var s when s.Contains("break lost") => "break_lost",
+            var s when s.Contains("sideline") => "sideline_ball",
+            var s when s.Contains("retained") => "retained",
+            _ => normalized.Replace(" ", "_")
+        };
+    }
+
+    /// <summary>
+    /// Gets or creates time period ID
+    /// </summary>
+    private async Task<int> GetTimePeriodIdAsync(int period)
+    {
+        var periodName = period switch
+        {
+            1 => "First Half",
+            2 => "Second Half",
+            _ => "First Half"
+        };
+
+        try
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var scopedContext = scope.ServiceProvider.GetRequiredService<GAAStatDbContext>();
+
+            var timePeriod = await scopedContext.TimePeriods
+                .FirstOrDefaultAsync(tp => tp.PeriodName == periodName)
+                .ConfigureAwait(false);
+
+            if (timePeriod == null)
+            {
+                timePeriod = new TimePeriod
+                {
+                    PeriodName = periodName,
+                    Description = $"Match period {period}"
+                };
+
+                await scopedContext.TimePeriods.AddAsync(timePeriod);
+                await scopedContext.SaveChangesAsync();
+
+                _logger.LogInformation("Created new time period: {PeriodName} (ID: {Id})", 
+                    periodName, timePeriod.TimePeriodId);
+            }
+
+            return timePeriod.TimePeriodId;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get or create time period for period {Period}", period);
+            return period; // Fallback to numeric value
+        }
+    }
+
+    /// <summary>
+    /// Gets or creates kickout type ID
+    /// </summary>
+    private async Task<int> GetKickoutTypeIdAsync(string kickoutType)
+    {
+        if (string.IsNullOrWhiteSpace(kickoutType))
+            kickoutType = "General";
+
+        var normalizedType = NormalizeKickoutType(kickoutType);
+
+        try
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var scopedContext = scope.ServiceProvider.GetRequiredService<GAAStatDbContext>();
+
+            var kickoutTypeEntity = await scopedContext.KickoutTypes
+                .FirstOrDefaultAsync(kt => kt.TypeName == normalizedType)
+                .ConfigureAwait(false);
+
+            if (kickoutTypeEntity == null)
+            {
+                kickoutTypeEntity = new KickoutType
+                {
+                    TypeName = normalizedType,
+                    Description = $"Kickout type: {normalizedType}"
+                };
+
+                await scopedContext.KickoutTypes.AddAsync(kickoutTypeEntity);
+                await scopedContext.SaveChangesAsync();
+
+                _logger.LogInformation("Created new kickout type: {TypeName} (ID: {Id})", 
+                    normalizedType, kickoutTypeEntity.KickoutTypeId);
+            }
+
+            return kickoutTypeEntity.KickoutTypeId;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get or create kickout type for '{KickoutType}'", kickoutType);
+            return 1; // Fallback to default ID
+        }
+    }
+
+    /// <summary>
+    /// Gets or creates team type ID
+    /// </summary>
+    private async Task<int> GetTeamTypeIdAsync(string teamName, bool isOpposition)
+    {
+        var typeName = isOpposition ? "Opposition" : "Drum";
+
+        try
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var scopedContext = scope.ServiceProvider.GetRequiredService<GAAStatDbContext>();
+
+            var teamTypeEntity = await scopedContext.TeamTypes
+                .FirstOrDefaultAsync(tt => tt.TypeName == typeName)
+                .ConfigureAwait(false);
+
+            if (teamTypeEntity == null)
+            {
+                teamTypeEntity = new TeamType
+                {
+                    TypeName = typeName,
+                    Description = $"Team type: {typeName}"
+                };
+
+                await scopedContext.TeamTypes.AddAsync(teamTypeEntity);
+                await scopedContext.SaveChangesAsync();
+
+                _logger.LogInformation("Created new team type: {TypeName} (ID: {Id})", 
+                    typeName, teamTypeEntity.TeamTypeId);
+            }
+
+            return teamTypeEntity.TeamTypeId;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get or create team type for '{TeamName}' (Opposition: {IsOpposition})", 
+                teamName, isOpposition);
+            return isOpposition ? 2 : 1; // Fallback to simple mapping
+        }
+    }
+
+    /// <summary>
+    /// Normalizes kickout type names for consistent database storage
+    /// </summary>
+    private string NormalizeKickoutType(string kickoutType)
+    {
+        if (string.IsNullOrWhiteSpace(kickoutType))
+            return "General";
+
+        var normalized = kickoutType.ToLowerInvariant().Trim();
+        return normalized switch
+        {
+            "long" or "long kickout" => "Long",
+            "short" or "short kickout" => "Short", 
+            "kickout" or "general" or "normal" => "General",
+            "restarts" or "restart" => "Restart",
+            _ => char.ToUpper(normalized[0]) + normalized[1..] // Capitalize first letter
+        };
+    }
+
+    /// <summary>
+    /// Saves kickout analysis records to database
+    /// </summary>
+    private async Task<int> SaveKickoutAnalysisAsync(
+        List<KickoutAnalysisRecord> records, 
+        CancellationToken cancellationToken)
+    {
+        if (!records.Any())
+            return 0;
+
+        try
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var scopedContext = scope.ServiceProvider.GetRequiredService<GAAStatDbContext>();
+
+            var entities = records.Select(r => new KickoutAnalysis
+            {
+                MatchId = r.MatchId,
+                TimePeriodId = r.TimePeriodId,
+                KickoutTypeId = r.KickoutTypeId,
+                TeamTypeId = r.TeamTypeId,
+                TotalAttempts = r.TotalAttempts,
+                Successful = r.Successful,
+                SuccessRate = r.SuccessRate,
+                OutcomeBreakdown = string.IsNullOrWhiteSpace(r.OutcomeBreakdown) 
+                    ? null 
+                    : JsonDocument.Parse(r.OutcomeBreakdown)
+            }).ToList();
+
+            await scopedContext.KickoutAnalyses.AddRangeAsync(entities, cancellationToken);
+            await scopedContext.SaveChangesAsync(cancellationToken);
+
+            _logger.LogInformation("Saved {RecordCount} kickout analysis records to database", entities.Count);
+            return entities.Count;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to save kickout analysis records");
+            throw;
+        }
+    }
+
+    #endregion
+    */ // END DISABLED: Kickout Analysis Processing
+
+    /* DISABLED: Kickout Column Mapping Classes - Associated with removed kickout analysis processing
+    /// <summary>
+    /// Column mapping for dual-team kickout analysis Excel format
+    /// Drum team uses columns 1-10, Opposition team uses columns 11-21
+    /// </summary>
+    public static class KickoutColumnMapping
+    {
+        public static readonly ColumnSet DrumColumns = new()
+        {
+            EventNumber = 1,    // Column A
+            Time = 2,           // Column B
+            Period = 3,         // Column C
+            KickoutType = 4,    // Column D
+            Outcome = 5,        // Column E
+            Player = 6,         // Column F
+            Location = 7,       // Column G
+            Competition = 8,    // Column H
+            Teams = 9,          // Column I
+            Additional = 10     // Column J
+        };
+
+        public static readonly ColumnSet OppositionColumns = new()
+        {
+            EventNumber = 11,   // Column K
+            Time = 12,          // Column L
+            Period = 13,        // Column M
+            KickoutType = 14,   // Column N
+            Outcome = 15,       // Column O
+            Player = 16,        // Column P
+            Location = 17,      // Column Q
+            Competition = 18,   // Column R
+            Teams = 19,         // Column S
+            Additional = 20     // Column T
+        };
+
+        public class ColumnSet
+        {
+            public int EventNumber { get; set; }
+            public int Time { get; set; }
+            public int Period { get; set; }
+            public int KickoutType { get; set; }
+            public int Outcome { get; set; }
+            public int Player { get; set; }
+            public int Location { get; set; }
+            public int Competition { get; set; }
+            public int Teams { get; set; }
+            public int Additional { get; set; }
+        }
+    }
+    */ // END DISABLED: Kickout Column Mapping Classes
+
+    #region Team Statistics Processing
+
+    /// <summary>
+    /// Processes team-level match statistics from Excel sheets into database
+    /// </summary>
+    public async Task<ServiceResult<TeamStatsProcessingResult>> ProcessTeamStatisticsAsync(
+        Stream fileStream,
+        List<SheetInfo> teamSheets,
+        Dictionary<string, int> matchIdMap,
+        int jobId,
+        CancellationToken cancellationToken = default)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        var totalStatsCreated = 0;
+        var processedSheets = 0;
+        var failedSheets = 0;
+
+        try
+        {
+            _logger.LogInformation("🔧 Loading ExcelPackage once for team statistics processing to prevent stream issues");
+            fileStream.Position = 0;
+
+            ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
+            using var package = new ExcelPackage(fileStream);
+
+            foreach (var sheet in teamSheets)
+            {
+                var sheetStartTime = DateTime.UtcNow;
+
+                if (!matchIdMap.TryGetValue(sheet.Name, out var matchId))
+                {
+                    _logger.LogWarning("No match ID found for team stats sheet '{SheetName}'", sheet.Name);
+                    failedSheets++;
+                    continue;
+                }
+
+                var worksheet = package.Workbook.Worksheets[sheet.Name];
+                if (worksheet == null)
+                {
+                    _logger.LogWarning("Worksheet '{SheetName}' not found", sheet.Name);
+                    failedSheets++;
+                    continue;
+                }
+
+                var result = await ProcessTeamStatsSheetAsync(worksheet, matchId, sheet.Name, jobId, cancellationToken);
+
+                if (result.IsSuccess)
+                {
+                    totalStatsCreated += result.Data;
+                    processedSheets++;
+
+                    var duration = DateTime.UtcNow - sheetStartTime;
+                    _logger.LogInformation(
+                        "✅ Processed team stats sheet '{SheetName}': {Stats} statistics created in {Duration}ms",
+                        sheet.Name, result.Data, duration.TotalMilliseconds);
+                }
+                else
+                {
+                    failedSheets++;
+                    _logger.LogError("❌ Failed to process team stats sheet '{SheetName}': {Error}", 
+                        sheet.Name, result.ErrorMessage);
+                }
+            }
+
+            stopwatch.Stop();
+
+            return ServiceResult<TeamStatsProcessingResult>.Success(new TeamStatsProcessingResult
+            {
+                TotalStatisticsCreated = totalStatsCreated,
+                ProcessedSheets = processedSheets,
+                FailedSheets = failedSheets,
+                ProcessingTimeMs = stopwatch.ElapsedMilliseconds
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to process team statistics");
+            return ServiceResult<TeamStatsProcessingResult>.Failed($"Team statistics processing failed: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Processes individual team statistics sheet
+    /// </summary>
+    private async Task<ServiceResult<int>> ProcessTeamStatsSheetAsync(
+        ExcelWorksheet worksheet, 
+        int matchId, 
+        string sheetName,
+        int jobId,
+        CancellationToken cancellationToken)
+    {
+        var statisticsToInsert = new List<MatchTeamStatistics>();
+        var processedRows = 0;
+        var skippedRows = 0;
+
+        try
+        {
+            if (!await ValidateSheetStructureAsync(worksheet, sheetName, jobId))
+            {
+                return ServiceResult<int>.Failed("Invalid sheet structure");
+            }
+
+            var lastRow = worksheet.Dimension?.End.Row ?? 0;
+            _logger.LogInformation("Processing team statistics sheet '{SheetName}' with {RowCount} rows", 
+                sheetName, lastRow);
+
+            for (int row = 4; row <= lastRow; row++)
+            {
+                var statisticRow = await ProcessStatisticRowAsync(worksheet, row, matchId);
+
+                if (statisticRow != null)
+                {
+                    statisticsToInsert.Add(new MatchTeamStatistics
+                    {
+                        MatchId = statisticRow.MatchId,
+                        MetricDefinitionId = statisticRow.MetricDefinitionId,
+                        DrumFirstHalf = statisticRow.DrumFirstHalf,
+                        DrumSecondHalf = statisticRow.DrumSecondHalf,
+                        DrumFullGame = statisticRow.DrumFullGame,
+                        OppositionFirstHalf = statisticRow.OppositionFirstHalf,
+                        OppositionSecondHalf = statisticRow.OppositionSecondHalf,
+                        OppositionFullGame = statisticRow.OppositionFullGame
+                    });
+                    processedRows++;
+                }
+                else
+                {
+                    skippedRows++;
+                }
+            }
+
+            if (statisticsToInsert.Any())
+            {
+                using var scope = _serviceProvider.CreateScope();
+                var scopedContext = scope.ServiceProvider.GetRequiredService<GAAStatDbContext>();
+
+                await scopedContext.MatchTeamStatistics.AddRangeAsync(statisticsToInsert, cancellationToken);
+                await scopedContext.SaveChangesAsync(cancellationToken);
+            }
+
+            _logger.LogInformation(
+                "Team statistics processing completed for sheet '{SheetName}': " +
+                "{ProcessedRows} rows processed, {SkippedRows} rows skipped, " +
+                "{InsertedStats} statistics inserted", 
+                sheetName, processedRows, skippedRows, statisticsToInsert.Count);
+
+            return ServiceResult<int>.Success(statisticsToInsert.Count);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to process team statistics sheet '{SheetName}'", sheetName);
+
+            await _progressService.RecordValidationErrorAsync(
+                jobId, sheetName, null, null,
+                EtlErrorTypes.PROCESSING_ERROR,
+                $"Failed to process team statistics: {ex.Message}",
+                "Check sheet format and data integrity");
+
+            return ServiceResult<int>.Failed($"Failed to process team statistics: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Processes individual statistic row from team statistics sheet
+    /// </summary>
+    private async Task<TeamStatisticRow?> ProcessStatisticRowAsync(
+        ExcelWorksheet worksheet, 
+        int row, 
+        int matchId)
+    {
+        var metricName = ExtractMetricName(worksheet, row);
+
+        if (row <= 3 || string.IsNullOrEmpty(metricName))
+            return null;
+
+        var metricDefinitionId = await GetOrCreateMetricDefinitionAsync(metricName);
+
+        return new TeamStatisticRow
+        {
+            MatchId = matchId,
+            MetricDefinitionId = metricDefinitionId,
+            DrumFirstHalf = ProcessNumericValue(worksheet.Cells[row, 1].Value),
+            DrumSecondHalf = ProcessNumericValue(worksheet.Cells[row, 2].Value),
+            DrumFullGame = ProcessNumericValue(worksheet.Cells[row, 3].Value),
+            OppositionFirstHalf = ProcessNumericValue(worksheet.Cells[row, 4].Value),
+            OppositionSecondHalf = ProcessNumericValue(worksheet.Cells[row, 5].Value),
+            OppositionFullGame = ProcessNumericValue(worksheet.Cells[row, 6].Value)
+        };
+    }
+
+    /// <summary>
+    /// Determines if a sheet contains team match statistics
+    /// </summary>
+    private bool IsTeamMatchStatsSheet(SheetInfo sheet)
+    {
+        var pattern = @"^\d{2}\.\s+.+\s+vs\s+.+";
+        return System.Text.RegularExpressions.Regex.IsMatch(sheet.Name, pattern) && 
+               !sheet.Name.Contains("Player Stats", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Extracts metric name from Excel cell with fallback handling
+    /// </summary>
+    private string ExtractMetricName(ExcelWorksheet worksheet, int row)
+    {
+        var cellValue = worksheet.Cells[row, 1].Text?.Trim();
+
+        if (string.IsNullOrEmpty(cellValue))
+        {
+            for (int i = row - 1; i >= 4; i--)
+            {
+                var previousValue = worksheet.Cells[i, 1].Text?.Trim();
+                if (!string.IsNullOrEmpty(previousValue))
+                {
+                    return $"{previousValue}_sub_{row - i}";
+                }
+            }
+        }
+
+        return cellValue ?? $"unknown_metric_row_{row}";
+    }
+
+    /// <summary>
+    /// Processes numeric values from Excel cells with proper handling for percentages and decimals
+    /// </summary>
+    private decimal? ProcessNumericValue(object? cellValue)
+    {
+        if (cellValue == null) return null;
+
+        var stringValue = cellValue.ToString()?.Trim();
+
+        if (string.IsNullOrEmpty(stringValue) || 
+            stringValue.Equals("NaN", StringComparison.OrdinalIgnoreCase) ||
+            stringValue.Equals("-", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        if (decimal.TryParse(stringValue, out var decimalValue))
+        {
+            if (decimalValue > 1.0m && decimalValue <= 100.0m)
+            {
+                return decimalValue / 100.0m;
+            }
+            return Math.Round(decimalValue, 6);
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Gets or creates metric definition for team statistics
+    /// </summary>
+    private async Task<int> GetOrCreateMetricDefinitionAsync(string metricName)
+    {
+        var normalizedName = NormalizeMetricName(metricName);
+
+        var existingMetric = await _context.MetricDefinitions
+            .FirstOrDefaultAsync(md => md.MetricName == normalizedName);
+
+        if (existingMetric != null)
+            return existingMetric.MetricId;
+
+        var newMetric = new MetricDefinition
+        {
+            MetricName = normalizedName,
+            MetricCategoryId = await GetDefaultMetricCategoryAsync(),
+            DataType = DetermineDataType(metricName),
+            MetricDescription = $"Team statistic: {metricName}"
+        };
+
+        await _context.MetricDefinitions.AddAsync(newMetric);
+        await _context.SaveChangesAsync();
+
+        return newMetric.MetricId;
+    }
+
+    /// <summary>
+    /// Normalizes metric names for consistent database storage
+    /// </summary>
+    private string NormalizeMetricName(string metricName)
+    {
+        return metricName
+            .ToLowerInvariant()
+            .Replace(" ", "_")
+            .Replace("-", "_")
+            .Replace("(", "")
+            .Replace(")", "")
+            .Replace("%", "percent")
+            .Trim();
+    }
+
+    /// <summary>
+    /// Determines data type based on metric name patterns
+    /// </summary>
+    private string DetermineDataType(string metricName)
+    {
+        if (metricName.Contains("%") || metricName.Contains("Rate") || 
+            metricName.Contains("Success") || metricName.Contains("Efficiency"))
+            return "percentage";
+
+        if (metricName.Contains("Total") || metricName.Contains("Count") ||
+            metricName.EndsWith("s"))
+            return "count";
+
+        return "decimal";
+    }
+
+    /// <summary>
+    /// Gets default metric category ID for team statistics
+    /// </summary>
+    private async Task<int> GetDefaultMetricCategoryAsync()
+    {
+        const string defaultCategoryName = "Team Statistics";
+        
+        var category = await _context.MetricCategories
+            .FirstOrDefaultAsync(mc => mc.CategoryName == defaultCategoryName);
+
+        if (category != null)
+            return category.MetricCategoryId;
+
+        var newCategory = new MetricCategory
+        {
+            CategoryName = defaultCategoryName,
+            Description = "General team-level match statistics"
+        };
+
+        await _context.MetricCategories.AddAsync(newCategory);
+        await _context.SaveChangesAsync();
+
+        return newCategory.MetricCategoryId;
+    }
+
+    /// <summary>
+    /// Validates sheet structure for team statistics processing
+    /// </summary>
+    private async Task<bool> ValidateSheetStructureAsync(
+        ExcelWorksheet worksheet, 
+        string sheetName, 
+        int jobId)
+    {
+        var errors = new List<string>();
+
+        if (worksheet.Dimension?.End.Column < 6)
+        {
+            errors.Add("Sheet must have at least 6 columns for team statistics");
+        }
+
+        if (worksheet.Dimension?.End.Row < 10)
+        {
+            errors.Add("Sheet must have at least 10 rows of data");
+        }
+
+        // Skip row 1 validation entirely - process what's available
+        // The sheets may have different header formats than expected
+
+        if (errors.Any())
+        {
+            foreach (var error in errors)
+            {
+                await _progressService.RecordValidationErrorAsync(
+                    jobId, sheetName, null, null,
+                    EtlErrorTypes.SHEET_STRUCTURE,
+                    error,
+                    "Ensure sheet follows expected GAA match statistics format");
+            }
+            return false;
+        }
+
+        return true;
+    }
 
     #endregion
 }

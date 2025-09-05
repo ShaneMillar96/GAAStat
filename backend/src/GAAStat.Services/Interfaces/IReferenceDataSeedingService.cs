@@ -61,6 +61,12 @@ public interface IReferenceDataSeedingService
     Task<ServiceResult<int>> SeedMetricCategoriesAsync();
 
     /// <summary>
+    /// Seeds KPI definitions with default GAA statistical definitions
+    /// Provides fallback KPI definitions when Excel file doesn't contain KPI Definitions sheet
+    /// </summary>
+    // Task<ServiceResult<int>> SeedKpiDefinitionsAsync();
+
+    /// <summary>
     /// Checks if all required reference data exists
     /// </summary>
     /// <returns>Validation result indicating missing reference data</returns>

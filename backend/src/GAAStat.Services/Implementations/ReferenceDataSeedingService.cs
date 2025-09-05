@@ -87,6 +87,13 @@ public class ReferenceDataSeedingService : IReferenceDataSeedingService
             else
                 result.WarningMessages.Add($"Metric categories seeding failed: {metricCategoriesResult.ErrorMessage}");
 
+            // REMOVED: KPI definitions seeding (feature removed as not essential)
+            // var kpiDefinitionsResult = await SeedKpiDefinitionsAsync();
+            // if (kpiDefinitionsResult.IsSuccess)
+            //     result.KpiDefinitionsSeeded = kpiDefinitionsResult.Data;
+            // else
+            //     result.WarningMessages.Add($"KPI definitions seeding failed: {kpiDefinitionsResult.ErrorMessage}");
+
             _logger.LogInformation("Reference data seeding completed. Total records seeded: {TotalSeeded}", 
                 result.TotalSeeded);
 
@@ -561,6 +568,79 @@ public class ReferenceDataSeedingService : IReferenceDataSeedingService
             return ServiceResult<ReferenceDataValidationResult>.Failed("Reference data validation failed");
         }
     }
+
+    // REMOVED: KPI definitions seeding method (feature removed as not essential)
+    // /// <summary>
+    // /// Seeds KPI definitions with default GAA statistical definitions
+    // /// Provides fallback KPI definitions when Excel file doesn't contain KPI Definitions sheet
+    // /// </summary>
+    // public async Task<ServiceResult<int>> SeedKpiDefinitionsAsync()
+    // {
+    //     try
+    //     {
+    //         var existingCount = await _context.KpiDefinitions.CountAsync();
+    //         if (existingCount >= ReferenceDataConstants.DefaultKpiDefinitions.Count)
+    //         {
+    //             _logger.LogInformation("KPI definitions already exist ({ExistingCount} records). Skipping seeding.", existingCount);
+    //             return ServiceResult<int>.Success(0);
+    //         }
+    //
+    //         var seededCount = 0;
+    //
+    //         foreach (var (kpiCode, kpiName, description, positionRelevance, psrValue) in ReferenceDataConstants.DefaultKpiDefinitions)
+    //         {
+    //             var existingKpi = await _context.KpiDefinitions
+    //                 .FirstOrDefaultAsync(k => k.KpiCode == kpiCode);
+    //
+    //             if (existingKpi == null)
+    //             {
+    //                 var newKpi = new KpiDefinition
+    //                 {
+    //                     KpiCode = kpiCode,
+    //                     KpiName = kpiName,
+    //                     Description = description,
+    //                     PositionRelevance = positionRelevance
+    //                 };
+    //
+    //                 // Add benchmark values if PSR value is provided
+    //                 if (psrValue.HasValue)
+    //                 {
+    //                     var benchmarkData = new
+    //                     {
+    //                         psr_value = psrValue.Value,
+    //                         team_assignment = positionRelevance,
+    //                         created_at = DateTime.UtcNow,
+    //                         source = "default_seed"
+    //                     };
+    //                     newKpi.BenchmarkValues = System.Text.Json.JsonDocument.Parse(
+    //                         System.Text.Json.JsonSerializer.Serialize(benchmarkData));
+    //                 }
+    //
+    //                 await _context.KpiDefinitions.AddAsync(newKpi);
+    //                 seededCount++;
+    //
+    //                 _logger.LogDebug("Seeded KPI definition: {KpiCode} - {KpiName}", kpiCode, kpiName);
+    //             }
+    //         }
+    //
+    //         if (seededCount > 0)
+    //         {
+    //             await _context.SaveChangesAsync();
+    //             _logger.LogInformation("Seeded {SeededCount} KPI definitions", seededCount);
+    //         }
+    //         else
+    //         {
+    //             _logger.LogInformation("All KPI definitions already exist. No seeding required.");
+    //         }
+    //
+    //         return ServiceResult<int>.Success(seededCount);
+    //     }
+    //     catch (Exception ex)
+    //     {
+    //         _logger.LogError(ex, "Failed to seed KPI definitions");
+    //         return ServiceResult<int>.Failed($"KPI definitions seeding failed: {ex.Message}");
+    //     }
+    // }
 
     #region Private Helper Methods
 
