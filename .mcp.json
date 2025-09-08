@@ -11,6 +11,13 @@
         "--user", "gaastat",
         "--password", "password1"
       ]
+    },
+    "playwright": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@executeautomation/playwright-mcp-server"
+      ]
     }
   }
 }
