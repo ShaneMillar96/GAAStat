@@ -52,6 +52,8 @@ builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(optio
 builder.Services.Configure<Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerOptions>(options =>
 {
     options.Limits.MaxRequestBodySize = GAAStat.Dal.EnvironmentVariables.MaxFileSizeMb * 1024 * 1024; // Use environment variable
+    options.Limits.RequestHeadersTimeout = TimeSpan.FromMinutes(5); // Increase timeout for large uploads
+    options.Limits.KeepAliveTimeout = TimeSpan.FromMinutes(5);
 });
 
 // Configure CORS for frontend development

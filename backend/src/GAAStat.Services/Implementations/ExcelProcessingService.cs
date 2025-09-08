@@ -430,11 +430,12 @@ public class ExcelProcessingService : IExcelProcessingService
             deletedCounts["free_types"] = await _context.Database.ExecuteSqlRawAsync(
                 "DELETE FROM free_types");
 
-            deletedCounts["metric_categories"] = await _context.Database.ExecuteSqlRawAsync(
-                "DELETE FROM metric_categories");
-
+            // CRITICAL FIX: Delete metric_definitions BEFORE metric_categories to avoid foreign key constraint violation
             deletedCounts["metric_definitions"] = await _context.Database.ExecuteSqlRawAsync(
                 "DELETE FROM metric_definitions");
+
+            deletedCounts["metric_categories"] = await _context.Database.ExecuteSqlRawAsync(
+                "DELETE FROM metric_categories");
 
             deletedCounts["kpi_definitions"] = await _context.Database.ExecuteSqlRawAsync(
                 "DELETE FROM kpi_definitions");
@@ -1500,16 +1501,24 @@ public class ExcelProcessingService : IExcelProcessingService
                 _logger.LogError(dbEx, "Database constraint violation when saving player statistics for batch {BatchNumber}. Inner exception: {InnerException}", 
                     batchNumber, dbEx.InnerException?.Message);
                 
-                // Add detailed error for each statistic
+                // Add detailed error for each statistic with better error classification
+                var isUniqueConstraintViolation = dbEx.InnerException?.Message?.Contains("uk_match_player_statistics_match_player") == true ||
+                                                 dbEx.InnerException?.Message?.Contains("duplicate key value") == true;
+                
+                var errorType = isUniqueConstraintViolation ? "duplicate_stats" : EtlErrorTypes.MISSING_DATA;
+                var suggestedFix = isUniqueConstraintViolation ? 
+                    "Duplicate player statistics detected - remove duplicate data from Excel file" : 
+                    "Check foreign key constraints and data integrity";
+
                 foreach (var stat in statsToAdd)
                 {
                     validationErrors.Add(new EtlValidationError
                     {
                         JobId = jobId,
                         SheetName = "batch_" + batchNumber,
-                        ErrorType = EtlErrorTypes.MISSING_DATA,
+                        ErrorType = errorType,
                         ErrorMessage = $"Database constraint violation for Player ID {stat.PlayerId} in Match ID {stat.MatchId}: {dbEx.InnerException?.Message ?? dbEx.Message}",
-                        SuggestedFix = "Check foreign key constraints and data integrity",
+                        SuggestedFix = suggestedFix,
                         CreatedAt = DateTime.UtcNow
                     });
                 }
@@ -1736,16 +1745,24 @@ public class ExcelProcessingService : IExcelProcessingService
                 _logger.LogError(dbEx, "Database constraint violation when saving player statistics for batch {BatchNumber} with scoped context. Inner exception: {InnerException}. Full exception: {FullException}", 
                     batchNumber, dbEx.InnerException?.Message, dbEx.ToString());
                 
-                // Add detailed error for each statistic
+                // Add detailed error for each statistic with better error classification
+                var isUniqueConstraintViolation = dbEx.InnerException?.Message?.Contains("uk_match_player_statistics_match_player") == true ||
+                                                 dbEx.InnerException?.Message?.Contains("duplicate key value") == true;
+                
+                var errorType = isUniqueConstraintViolation ? "duplicate_stats" : EtlErrorTypes.MISSING_DATA;
+                var suggestedFix = isUniqueConstraintViolation ? 
+                    "Duplicate player statistics detected - remove duplicate data from Excel file" : 
+                    "Check foreign key constraints and data integrity";
+
                 foreach (var stat in statsToAdd)
                 {
                     validationErrors.Add(new EtlValidationError
                     {
                         JobId = jobId,
                         SheetName = "batch_" + batchNumber,
-                        ErrorType = EtlErrorTypes.MISSING_DATA,
+                        ErrorType = errorType,
                         ErrorMessage = $"Database constraint violation for Player ID {stat.PlayerId} in Match ID {stat.MatchId}: {dbEx.InnerException?.Message ?? dbEx.Message}",
-                        SuggestedFix = "Check foreign key constraints and data integrity",
+                        SuggestedFix = suggestedFix,
                         CreatedAt = DateTime.UtcNow
                     });
                 }
@@ -1831,7 +1848,8 @@ public class ExcelProcessingService : IExcelProcessingService
                 {
                     PlayerName = ((string)playerRequest.PlayerName).Trim(),
                     JerseyNumber = (int?)playerRequest.JerseyNumber,
-                    IsActive = true
+                    IsActive = true,
+                    PositionId = null // Explicitly set to null for ETL imports
                 };
                 newPlayers.Add(player);
             }
@@ -1921,7 +1939,8 @@ public class ExcelProcessingService : IExcelProcessingService
                 {
                     PlayerName = ((string)playerRequest.PlayerName).Trim(),
                     JerseyNumber = (int?)playerRequest.JerseyNumber,
-                    IsActive = true
+                    IsActive = true,
+                    PositionId = null // Explicitly set to null for ETL imports
                 };
                 newPlayers.Add(player);
             }
@@ -3034,10 +3053,28 @@ public class ExcelProcessingService : IExcelProcessingService
             }
 
             var lastRow = worksheet.Dimension?.End.Row ?? 0;
-            _logger.LogInformation("Processing team statistics sheet '{SheetName}' with {RowCount} rows", 
-                sheetName, lastRow);
+            
+            // CRITICAL FIX: Limit processing to actual data rows to prevent processing thousands of empty rows
+            var maxDataRow = Math.Min(lastRow, 300); // Conservative limit based on ~236 expected stats + buffer
+            var actualDataRows = 0;
+            
+            // Count actual data rows by checking for non-empty metric names in column A
+            for (int checkRow = 4; checkRow <= maxDataRow; checkRow++)
+            {
+                var cellValue = worksheet.Cells[checkRow, 1].Text?.Trim();
+                if (!string.IsNullOrEmpty(cellValue))
+                    actualDataRows++;
+                else if (actualDataRows > 10) // Stop counting after significant gap in data
+                    break;
+            }
+            
+            var effectiveLastRow = Math.Min(lastRow, 4 + actualDataRows + 50); // Data start + actual data + buffer
+            
+            _logger.LogInformation("Processing team statistics sheet '{SheetName}': Total rows {TotalRows}, " +
+                "Processing rows 4-{EffectiveLastRow} (limit: {ActualDataRows} data rows found)", 
+                sheetName, lastRow, effectiveLastRow, actualDataRows);
 
-            for (int row = 4; row <= lastRow; row++)
+            for (int row = 4; row <= effectiveLastRow; row++)
             {
                 var statisticRow = await ProcessStatisticRowAsync(worksheet, row, matchId);
 
@@ -3108,16 +3145,29 @@ public class ExcelProcessingService : IExcelProcessingService
 
         var metricDefinitionId = await GetOrCreateMetricDefinitionAsync(metricName);
 
+        // CRITICAL FIX: Correct column indices (column 1 is metric name, values start at column 2)
+        var drumFirstHalf = ProcessNumericValue(worksheet.Cells[row, 2].Value);
+        var drumSecondHalf = ProcessNumericValue(worksheet.Cells[row, 3].Value);
+        var drumFullGame = ProcessNumericValue(worksheet.Cells[row, 4].Value);
+        var oppositionFirstHalf = ProcessNumericValue(worksheet.Cells[row, 5].Value);
+        var oppositionSecondHalf = ProcessNumericValue(worksheet.Cells[row, 6].Value);
+        var oppositionFullGame = ProcessNumericValue(worksheet.Cells[row, 7].Value);
+
+        // CRITICAL FIX: Apply database constraint validation for period totals
+        // Constraint: ABS((first_half + second_half) - full_game) < 0.01
+        ValidateAndCorrectPeriodTotals(ref drumFirstHalf, ref drumSecondHalf, ref drumFullGame, "Drum", metricName, row);
+        ValidateAndCorrectPeriodTotals(ref oppositionFirstHalf, ref oppositionSecondHalf, ref oppositionFullGame, "Opposition", metricName, row);
+
         return new TeamStatisticRow
         {
             MatchId = matchId,
             MetricDefinitionId = metricDefinitionId,
-            DrumFirstHalf = ProcessNumericValue(worksheet.Cells[row, 1].Value),
-            DrumSecondHalf = ProcessNumericValue(worksheet.Cells[row, 2].Value),
-            DrumFullGame = ProcessNumericValue(worksheet.Cells[row, 3].Value),
-            OppositionFirstHalf = ProcessNumericValue(worksheet.Cells[row, 4].Value),
-            OppositionSecondHalf = ProcessNumericValue(worksheet.Cells[row, 5].Value),
-            OppositionFullGame = ProcessNumericValue(worksheet.Cells[row, 6].Value)
+            DrumFirstHalf = drumFirstHalf,
+            DrumSecondHalf = drumSecondHalf,
+            DrumFullGame = drumFullGame,
+            OppositionFirstHalf = oppositionFirstHalf,
+            OppositionSecondHalf = oppositionSecondHalf,
+            OppositionFullGame = oppositionFullGame
         };
     }
 
@@ -3179,6 +3229,127 @@ public class ExcelProcessingService : IExcelProcessingService
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Validates and corrects period totals to satisfy database constraint
+    /// Constraint: ABS((first_half + second_half) - full_game) < 0.01
+    /// </summary>
+    private void ValidateAndCorrectPeriodTotals(
+        ref decimal? firstHalf, 
+        ref decimal? secondHalf, 
+        ref decimal? fullGame, 
+        string teamName, 
+        string metricName, 
+        int row)
+    {
+        // Only validate if all three values are present
+        if (!firstHalf.HasValue || !secondHalf.HasValue || !fullGame.HasValue)
+            return;
+
+        var periodSum = firstHalf.Value + secondHalf.Value;
+        var difference = Math.Abs(periodSum - fullGame.Value);
+
+        // Use stricter tolerance to ensure database constraint is met (0.009 instead of 0.01)
+        if (difference < 0.009m)
+            return;
+
+        // CRITICAL FIX: Apply correction strategy based on metric type
+        var lowerMetricName = metricName.ToLowerInvariant();
+
+        if (IsAdditiveMetric(lowerMetricName))
+        {
+            // For additive metrics (counts, totals), use period sum as full game
+            var originalFullGame = fullGame.Value;
+            fullGame = Math.Round(periodSum, 4); // Use same precision as database (4 decimals)
+            
+            // Double-check: Verify the constraint will be satisfied
+            var newDifference = Math.Abs((firstHalf.Value + secondHalf.Value) - fullGame.Value);
+            if (newDifference >= 0.01m)
+            {
+                // If still violating, clear period values as fallback
+                _logger.LogWarning("⚠️ Additive metric fix still violating constraint for {TeamName} {MetricName} (row {Row}): " +
+                    "difference {Difference} >= 0.01, clearing period values as fallback", 
+                    teamName, metricName, row, newDifference);
+                firstHalf = null;
+                secondHalf = null;
+            }
+            else
+            {
+                _logger.LogInformation("✅ Period totals constraint fix for {TeamName} {MetricName} (row {Row}): " +
+                    "Additive metric - Updated full game from {OriginalValue} to {CorrectedValue} " +
+                    "(first: {FirstHalf}, second: {SecondHalf}, verified difference: {NewDifference})",
+                    teamName, metricName, row, originalFullGame, fullGame, firstHalf, secondHalf, newDifference);
+            }
+        }
+        else
+        {
+            // For non-additive metrics (averages, ratios, percentages), 
+            // set period values to null to avoid constraint violation
+            _logger.LogInformation("🔧 Period totals constraint fix for {TeamName} {MetricName} (row {Row}): " +
+                "Non-additive metric - Clearing period values to preserve full game {FullGameValue} " +
+                "(original first: {FirstHalf}, second: {SecondHalf}, difference: {Difference})",
+                teamName, metricName, row, fullGame, firstHalf, secondHalf, difference);
+                
+            firstHalf = null;
+            secondHalf = null;
+        }
+    }
+
+    /// <summary>
+    /// Determines if a metric should be additive (sum of periods = full game)
+    /// </summary>
+    private static bool IsAdditiveMetric(string lowerMetricName)
+    {
+        // Metrics that should be additive (counts, totals, frequencies)
+        var additiveKeywords = new[] 
+        {
+            "total", "count", "number", "frequency", "sum", "goals", "points", 
+            "attempts", "completed", "missed", "successful", "unsuccessful",
+            "source", "attack", "shot", "free", "booking", "card", "foul"
+        };
+
+        // Metrics that are NOT additive (averages, percentages, ratios)
+        var nonAdditiveKeywords = new[] 
+        {
+            "percentage", "percent", "rate", "ratio", "average", "avg", "efficiency",
+            "success", "accuracy", "conversion", "per", "time", "speed", "distance",
+            "possession", "won %", "attacks to", "ret attacks"
+        };
+        
+        // ENHANCED: Specific non-additive metric patterns identified from Excel analysis
+        var nonAdditivePatterns = new[]
+        {
+            "attacks to shot efficiency",
+            "avg attacks per score", 
+            "conversion rate %",
+            "opp kickouts won %",
+            "opp poss. to tackle efficency",
+            "own kickouts won %",
+            "ret attacks to shots",
+            "total kickouts won %", 
+            "total possession",
+            "total shot conversion"
+        };
+
+        // Check for specific non-additive pattern matches first (most specific)
+        if (nonAdditivePatterns.Any(pattern => lowerMetricName.Contains(pattern)))
+            return false;
+            
+        // Check if metric ends with % (always non-additive)
+        if (lowerMetricName.EndsWith("%") || lowerMetricName.Contains(" %"))
+            return false;
+
+        // Check for non-additive keywords (general patterns)
+        if (nonAdditiveKeywords.Any(keyword => lowerMetricName.Contains(keyword)))
+            return false;
+
+        // Check for additive keywords
+        if (additiveKeywords.Any(keyword => lowerMetricName.Contains(keyword)))
+            return true;
+
+        // Default: treat as additive if unsure (safer for constraint satisfaction)
+        return true;
     }
 
     /// <summary>

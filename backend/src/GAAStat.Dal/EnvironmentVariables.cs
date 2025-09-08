@@ -4,7 +4,7 @@ public static class EnvironmentVariables
 {
     public static string DatabaseConnectionString =>
         Environment.GetEnvironmentVariable("DATABASE_CONNECTION_STRING") ??
-        "Host=localhost;Database=gaastat-dev;Username=gaastat;Password=password1;";
+        "Host=localhost;Database=gaastat-dev;Username=gaastat;Password=password1;Include Error Detail=true;";
 
     public static int MaxFileSizeMb =>
         int.TryParse(Environment.GetEnvironmentVariable("MAX_FILE_SIZE_MB"), out var size) ? size : 50;

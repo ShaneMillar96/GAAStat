@@ -274,12 +274,28 @@ public class DataTransformationService : IDataTransformationService
                 return ("League", afterVs); // Default competition for home games
             }
             
-            // If beforeVs contains competition name (Championship, etc.), then afterVs is opposition
+            // If beforeVs contains competition name (Championship, etc.), then beforeVs is competition, afterVs is opposition
             if (beforeVs.Contains("Championship", StringComparison.OrdinalIgnoreCase) ||
                 beforeVs.Contains("Neal Carlin", StringComparison.OrdinalIgnoreCase) ||
-                beforeVs.Contains("Cup", StringComparison.OrdinalIgnoreCase))
+                beforeVs.Contains("Cup", StringComparison.OrdinalIgnoreCase) ||
+                beforeVs.Contains("League", StringComparison.OrdinalIgnoreCase))
             {
                 return (beforeVs, afterVs);
+            }
+
+            // If beforeVs looks like a team name (contains common GAA team name patterns)
+            if (beforeVs.Contains("Drum", StringComparison.OrdinalIgnoreCase) ||
+                beforeVs.EndsWith("GAC", StringComparison.OrdinalIgnoreCase) ||
+                beforeVs.EndsWith("GFC", StringComparison.OrdinalIgnoreCase) ||
+                beforeVs.Contains("Colmcille", StringComparison.OrdinalIgnoreCase) ||
+                beforeVs.Contains("Trasna", StringComparison.OrdinalIgnoreCase) ||
+                beforeVs.Contains("Dolans", StringComparison.OrdinalIgnoreCase) ||
+                beforeVs.Contains("Moneymore", StringComparison.OrdinalIgnoreCase) ||
+                beforeVs.Contains("Glack", StringComparison.OrdinalIgnoreCase) ||
+                beforeVs.Contains("Magilligan", StringComparison.OrdinalIgnoreCase) ||
+                beforeVs.Contains("Lissan", StringComparison.OrdinalIgnoreCase))
+            {
+                return ("League", afterVs); // Assume League if beforeVs is a team name
             }
 
             // Default: beforeVs is competition, afterVs is opposition
@@ -293,14 +309,42 @@ public class DataTransformationService : IDataTransformationService
             var before = sheetName[..vsIndex].Trim();
             var after = sheetName[(vsIndex + 4)..].Trim();
             
-            // Remove match number prefix if present
-            var spaceIndex = before.IndexOf(' ');
-            if (spaceIndex > 0 && before[..spaceIndex].All(c => char.IsDigit(c) || c == '.'))
+            // Remove match number prefix if present (e.g., "07. " from "07. Drum vs Lissan")
+            var dotSpaceIndex = before.IndexOf(". ");
+            if (dotSpaceIndex > 0 && before[..dotSpaceIndex].All(c => char.IsDigit(c)))
             {
-                before = before[(spaceIndex + 1)..].Trim();
+                before = before[(dotSpaceIndex + 2)..].Trim();
             }
 
-            return (before, after);
+            // Clean up the after part - remove any trailing date fragments or spaces
+            // Handle cases like "Lissan 03.0" or "Magilligan " (truncated)
+            var afterWords = after.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (afterWords.Length > 1)
+            {
+                // Check if last word looks like a date fragment
+                var lastWord = afterWords[^1];
+                if (System.Text.RegularExpressions.Regex.IsMatch(lastWord, @"^\d{1,2}\.?\d*\.?\d*$"))
+                {
+                    // Remove the date fragment
+                    after = string.Join(" ", afterWords[..^1]).Trim();
+                }
+            }
+
+            // Apply the same team/competition logic as the regex version
+            if (before.Equals("Drum", StringComparison.OrdinalIgnoreCase))
+            {
+                return ("League", after);
+            }
+            
+            if (before.Contains("Championship", StringComparison.OrdinalIgnoreCase) ||
+                before.Contains("Neal Carlin", StringComparison.OrdinalIgnoreCase) ||
+                before.Contains("Cup", StringComparison.OrdinalIgnoreCase) ||
+                before.Contains("League", StringComparison.OrdinalIgnoreCase))
+            {
+                return (before, after);
+            }
+
+            return ("League", after); // Default to League if unclear
         }
 
         _logger.LogWarning("Could not parse teams from sheet name: {SheetName}", sheetName);
