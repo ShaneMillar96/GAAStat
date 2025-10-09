@@ -1,3 +1,4 @@
+using GAAStat.Services.ETL;
 using GAAStat.Services.ETL.Interfaces;
 using GAAStat.Services.ETL.Loaders;
 using GAAStat.Services.ETL.Readers;
@@ -13,19 +14,23 @@ namespace GAAStat.Services.Extensions;
 public static class ServiceCollectionExtensions
 {
     /// <summary>
-    /// Registers all ETL services for match statistics processing
+    /// Registers all ETL services for GAA statistics processing (match and player statistics)
     /// </summary>
     /// <param name="services">Service collection</param>
     /// <returns>Service collection for chaining</returns>
-    public static IServiceCollection AddMatchStatisticsEtlServices(this IServiceCollection services)
+    public static IServiceCollection AddGAAStatisticsEtlServices(this IServiceCollection services)
     {
-        // Main ETL orchestrator
+        // Match statistics ETL services
         services.AddScoped<IMatchStatisticsEtlService, MatchStatisticsEtlService>();
-
-        // ETL pipeline components
         services.AddScoped<ExcelMatchDataReader>();
         services.AddScoped<MatchDataTransformer>();
         services.AddScoped<MatchDataLoader>();
+
+        // Player statistics ETL services
+        services.AddScoped<IPlayerStatisticsEtlService, PlayerStatisticsEtlService>();
+        services.AddScoped<PlayerDataLoader>();
+        services.AddScoped<PlayerRosterService>();
+        services.AddScoped<PositionDetectionService>();
 
         return services;
     }

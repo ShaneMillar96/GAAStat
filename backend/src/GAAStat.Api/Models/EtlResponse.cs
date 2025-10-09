@@ -21,6 +21,41 @@ public class EtlUploadResponse
     public int TeamStatisticsCreated { get; set; }
 
     /// <summary>
+    /// Number of player stats sheets processed
+    /// </summary>
+    public int PlayerSheetsProcessed { get; set; }
+
+    /// <summary>
+    /// Number of new players created
+    /// </summary>
+    public int PlayersCreated { get; set; }
+
+    /// <summary>
+    /// Number of existing players updated
+    /// </summary>
+    public int PlayersUpdated { get; set; }
+
+    /// <summary>
+    /// Number of player statistics records created
+    /// </summary>
+    public int PlayerStatisticsCreated { get; set; }
+
+    /// <summary>
+    /// Number of players skipped due to validation errors
+    /// </summary>
+    public int PlayersSkipped { get; set; }
+
+    /// <summary>
+    /// Total number of validation errors
+    /// </summary>
+    public int ValidationErrorsTotal { get; set; }
+
+    /// <summary>
+    /// Total number of validation warnings
+    /// </summary>
+    public int ValidationWarningsTotal { get; set; }
+
+    /// <summary>
     /// Duration of ETL operation in seconds
     /// </summary>
     public double DurationSeconds { get; set; }

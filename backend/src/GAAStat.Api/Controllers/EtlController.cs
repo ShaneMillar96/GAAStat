@@ -11,7 +11,8 @@ namespace GAAStat.Api.Controllers;
 [Route("api/[controller]")]
 public class EtlController : ControllerBase
 {
-    private readonly IMatchStatisticsEtlService _etlService;
+    private readonly IMatchStatisticsEtlService _matchEtlService;
+    private readonly IPlayerStatisticsEtlService _playerEtlService;
     private readonly ILogger<EtlController> _logger;
     private readonly IConfiguration _configuration;
 
@@ -20,26 +21,28 @@ public class EtlController : ControllerBase
     private static readonly string[] AllowedExtensions = { ".xlsx", ".xls" };
 
     public EtlController(
-        IMatchStatisticsEtlService etlService,
+        IMatchStatisticsEtlService matchEtlService,
+        IPlayerStatisticsEtlService playerEtlService,
         ILogger<EtlController> logger,
         IConfiguration configuration)
     {
-        _etlService = etlService;
+        _matchEtlService = matchEtlService;
+        _playerEtlService = playerEtlService;
         _logger = logger;
         _configuration = configuration;
     }
 
     /// <summary>
-    /// Upload and process a match statistics Excel file
+    /// Upload and process a GAA statistics Excel file (match and player statistics)
     /// </summary>
-    /// <param name="file">Excel file containing match statistics</param>
+    /// <param name="file">Excel file containing GAA statistics (match and player data)</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>ETL operation result with statistics</returns>
-    [HttpPost("match-statistics/upload")]
+    /// <returns>ETL operation result with comprehensive statistics</returns>
+    [HttpPost("gaa-statistics/upload")]
     [ProducesResponseType(typeof(EtlUploadResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(EtlUploadResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(EtlUploadResponse), StatusCodes.Status500InternalServerError)]
-    public async Task<ActionResult<EtlUploadResponse>> UploadMatchStatistics(
+    public async Task<ActionResult<EtlUploadResponse>> UploadGAAStatistics(
         IFormFile file,
         CancellationToken cancellationToken)
     {
@@ -68,46 +71,84 @@ public class EtlController : ControllerBase
             tempFilePath = await SaveFileToTempAsync(file, cancellationToken);
             _logger.LogInformation("File saved to temp location: {TempPath}", tempFilePath);
 
-            // Execute ETL pipeline
-            _logger.LogInformation("Starting ETL pipeline for file: {FileName}", file.FileName);
-            var etlResult = await _etlService.ProcessMatchStatisticsAsync(
+            // Execute Match ETL pipeline
+            _logger.LogInformation("Starting Match ETL pipeline for file: {FileName}", file.FileName);
+            var matchResult = await _matchEtlService.ProcessMatchStatisticsAsync(
                 tempFilePath,
                 cancellationToken);
 
-            // Map to API response
+            // Execute Player ETL pipeline (only if match ETL succeeded)
+            var playerResult = await _playerEtlService.ProcessPlayerStatisticsAsync(
+                tempFilePath,
+                cancellationToken);
+
+            // Calculate combined duration
+            var totalDuration = matchResult.Duration + playerResult.Duration;
+
+            // Map to API response - combine results from both ETL operations
             var response = new EtlUploadResponse
             {
-                Success = etlResult.Success,
-                MatchesProcessed = etlResult.MatchesProcessed,
-                TeamStatisticsCreated = etlResult.TeamStatisticsCreated,
-                DurationSeconds = etlResult.Duration.TotalSeconds,
-                Warnings = etlResult.Warnings.Select(w => new EtlWarningDto
+                Success = matchResult.Success && playerResult.Success,
+
+                // Match statistics
+                MatchesProcessed = matchResult.MatchesProcessed,
+                TeamStatisticsCreated = matchResult.TeamStatisticsCreated,
+
+                // Player statistics
+                PlayerSheetsProcessed = playerResult.PlayerSheetsProcessed,
+                PlayersCreated = playerResult.PlayersCreated,
+                PlayersUpdated = playerResult.PlayersUpdated,
+                PlayerStatisticsCreated = playerResult.PlayerStatisticsCreated,
+                PlayersSkipped = playerResult.PlayersSkipped,
+                ValidationErrorsTotal = playerResult.ValidationErrorsTotal,
+                ValidationWarningsTotal = playerResult.ValidationWarningsTotal,
+
+                // Combined metrics
+                DurationSeconds = totalDuration.TotalSeconds,
+
+                // Combine warnings from both operations
+                Warnings = matchResult.Warnings.Select(w => new EtlWarningDto
                 {
                     Code = w.Code,
                     Message = w.Message,
                     SheetName = w.SheetName
-                }).ToList(),
-                Errors = etlResult.Errors.Select(e => new EtlErrorDto
+                }).Concat(playerResult.Warnings.Select(w => new EtlWarningDto
+                {
+                    Code = w.Code,
+                    Message = w.Message,
+                    SheetName = w.SheetName
+                })).ToList(),
+
+                // Combine errors from both operations
+                Errors = matchResult.Errors.Select(e => new EtlErrorDto
                 {
                     Code = e.Code,
                     Message = e.Message,
                     SheetName = e.SheetName
-                }).ToList()
+                }).Concat(playerResult.Errors.Select(e => new EtlErrorDto
+                {
+                    Code = e.Code,
+                    Message = e.Message,
+                    SheetName = e.SheetName
+                })).ToList()
             };
 
             if (response.Success)
             {
                 _logger.LogInformation(
-                    "ETL completed successfully. Matches: {Matches}, Team Stats: {TeamStats}, Duration: {Duration}s",
+                    "GAA Statistics ETL completed successfully. Matches: {Matches}, Team Stats: {TeamStats}, Player Stats: {PlayerStats}, Players Created: {PlayersCreated}, Duration: {Duration}s",
                     response.MatchesProcessed,
                     response.TeamStatisticsCreated,
+                    response.PlayerStatisticsCreated,
+                    response.PlayersCreated,
                     response.DurationSeconds);
             }
             else
             {
                 _logger.LogError(
-                    "ETL completed with errors. Matches: {Matches}, Errors: {ErrorCount}",
+                    "GAA Statistics ETL completed with errors. Matches: {Matches}, Player Stats: {PlayerStats}, Errors: {ErrorCount}",
                     response.MatchesProcessed,
+                    response.PlayerStatisticsCreated,
                     response.Errors.Count);
             }
 
