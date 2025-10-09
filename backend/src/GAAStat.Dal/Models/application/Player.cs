@@ -1,41 +1,66 @@
-using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
+using System;
+using System.Collections.Generic;
 
-namespace GAAStat.Dal.Models.application;
+namespace GAAStat.Dal.Models.Application;
 
-public partial class Player
+/// <summary>
+/// Represents a GAA player
+/// </summary>
+public class Player
 {
-    [Key]
-    public int Id { get; set; }
+    /// <summary>
+    /// Primary key
+    /// </summary>
+    public int PlayerId { get; set; }
 
-    [Required]
-    public int TeamId { get; set; }
+    /// <summary>
+    /// Jersey/squad number (1-99)
+    /// </summary>
+    public int JerseyNumber { get; set; }
 
-    public int? JerseyNumber { get; set; }
+    /// <summary>
+    /// Player's first name
+    /// </summary>
+    public string FirstName { get; set; } = string.Empty;
 
-    [Required]
-    [StringLength(50)]
-    public string FirstName { get; set; } = null!;
+    /// <summary>
+    /// Player's last name
+    /// </summary>
+    public string LastName { get; set; } = string.Empty;
 
-    [Required]
-    [StringLength(50)]
-    public string LastName { get; set; } = null!;
+    /// <summary>
+    /// Player's full name
+    /// </summary>
+    public string FullName { get; set; } = string.Empty;
 
-    [StringLength(30)]
-    public string? Position { get; set; }
+    /// <summary>
+    /// Foreign key to Position
+    /// </summary>
+    public int PositionId { get; set; }
 
-    public DateTime? DateOfBirth { get; set; }
+    /// <summary>
+    /// False for retired/inactive players
+    /// </summary>
+    public bool IsActive { get; set; }
 
-    public int? HeightCm { get; set; }
-
-    public int? WeightKg { get; set; }
-
+    /// <summary>
+    /// Record creation timestamp
+    /// </summary>
     public DateTime CreatedAt { get; set; }
 
+    /// <summary>
+    /// Record last updated timestamp
+    /// </summary>
     public DateTime UpdatedAt { get; set; }
 
-    [ForeignKey("TeamId")]
-    public virtual Team Team { get; set; } = null!;
+    // Navigation properties
+    /// <summary>
+    /// The player's position
+    /// </summary>
+    public virtual Position Position { get; set; } = null!;
 
-    public virtual ICollection<PlayerStat> PlayerStats { get; set; } = new List<PlayerStat>();
+    /// <summary>
+    /// Player's match statistics
+    /// </summary>
+    public virtual ICollection<PlayerMatchStatistics> MatchStatistics { get; set; } = new List<PlayerMatchStatistics>();
 }

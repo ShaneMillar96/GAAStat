@@ -1,30 +1,61 @@
-using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
+using System;
+using System.Collections.Generic;
 
-namespace GAAStat.Dal.Models.application;
+namespace GAAStat.Dal.Models.Application;
 
-public partial class Team
+/// <summary>
+/// Represents a GAA team (Drum or opponent)
+/// </summary>
+public class Team
 {
-    [Key]
-    public int Id { get; set; }
+    /// <summary>
+    /// Primary key
+    /// </summary>
+    public int TeamId { get; set; }
 
-    [Required]
-    [StringLength(100)]
-    public string Name { get; set; } = null!;
+    /// <summary>
+    /// Team name (e.g., "Drum", "Slaughtmanus")
+    /// </summary>
+    public string Name { get; set; } = string.Empty;
 
-    [StringLength(50)]
-    public string? County { get; set; }
+    /// <summary>
+    /// Team abbreviation (optional, e.g., "DRM")
+    /// </summary>
+    public string? Abbreviation { get; set; }
 
-    [Required]
-    [StringLength(20)]
-    public string Sport { get; set; } = null!;
+    /// <summary>
+    /// True only for Drum team
+    /// </summary>
+    public bool IsDrum { get; set; }
 
-    [StringLength(50)]
-    public string? Division { get; set; }
+    /// <summary>
+    /// False for inactive/historical teams
+    /// </summary>
+    public bool IsActive { get; set; }
 
+    /// <summary>
+    /// Record creation timestamp
+    /// </summary>
     public DateTime CreatedAt { get; set; }
 
+    /// <summary>
+    /// Record last updated timestamp
+    /// </summary>
     public DateTime UpdatedAt { get; set; }
 
-    public virtual ICollection<Player> Players { get; set; } = new List<Player>();
+    // Navigation properties
+    /// <summary>
+    /// Matches where this team is home
+    /// </summary>
+    public virtual ICollection<Match> HomeMatches { get; set; } = new List<Match>();
+
+    /// <summary>
+    /// Matches where this team is away
+    /// </summary>
+    public virtual ICollection<Match> AwayMatches { get; set; } = new List<Match>();
+
+    /// <summary>
+    /// Team statistics across all matches
+    /// </summary>
+    public virtual ICollection<MatchTeamStatistics> TeamStatistics { get; set; } = new List<MatchTeamStatistics>();
 }

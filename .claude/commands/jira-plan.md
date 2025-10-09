@@ -75,17 +75,44 @@ If any specialist has confidence < 8:
 
 Creating planning workspace at: `.work/JIRA-$ARGUMENTS/`
 
+**Note**: Only files for **deployed planners** will be created (no empty/unused planning artifacts).
+
 ```
 .work/JIRA-{TICKET-ID}/
-├── implementation.md           # Master implementation plan
-├── SCHEMA_CHANGES.md          # Database specialist output
-├── ETL_CHANGES.md             # ETL specialist output
-├── SERVICES_CHANGES.md        # Service specialist output
-├── API_CHANGES.md             # API specialist output
-├── confidence_scores.json     # Planning confidence metrics
-├── dependencies.md            # Cross-component dependencies
-├── risks.md                   # Risk register and mitigations
-└── questions.md               # Outstanding questions for stakeholders
+├── implementation.md           # Master implementation plan (always created)
+├── scope_analysis.md          # Planner selection rationale (always created)
+├── SCHEMA_CHANGES.md          # Database specialist output (if deployed)
+├── ETL_CHANGES.md             # ETL specialist output (if deployed)
+├── SERVICES_CHANGES.md        # Service specialist output (if deployed)
+├── API_CHANGES.md             # API specialist output (if deployed)
+├── confidence_scores.json     # Planning confidence metrics (deployed planners only)
+├── dependencies.md            # Cross-component dependencies (if multiple planners)
+├── risks.md                   # Risk register and mitigations (deployed planners only)
+└── questions.md               # Outstanding questions for stakeholders (if needed)
+```
+
+**Example Directory Structures**:
+
+```
+# Database-only change
+.work/JIRA-123/
+├── implementation.md
+├── scope_analysis.md
+├── SCHEMA_CHANGES.md
+├── confidence_scores.json
+└── risks.md
+
+# Full-stack feature
+.work/JIRA-456/
+├── implementation.md
+├── scope_analysis.md
+├── SCHEMA_CHANGES.md
+├── ETL_CHANGES.md
+├── SERVICES_CHANGES.md
+├── API_CHANGES.md
+├── confidence_scores.json
+├── dependencies.md
+└── risks.md
 ```
 
 ## 🔍 Implementation Logic
@@ -108,17 +135,118 @@ I will:
 3. **Identify Integration Points** through dependency analysis
 4. **Assess Current Database Schema** using PostgreSQL MCP
 
-### Step 3: Deploy Specialist Planning Agents in Parallel
+### Step 2.5: Intelligent Scope Analysis & Planner Selection
 
-I deploy all specialist agents **concurrently** to maximize planning efficiency:
+**CRITICAL**: Not all tickets require all planners. I analyze requirements to deploy only necessary specialists.
 
-#### 🚀 Parallel Execution Strategy
+#### 🎯 Scope Detection Decision Matrix
 
-All specialist agents execute simultaneously with smart coordination:
+I examine the JIRA ticket for these indicators:
 
-1. **Database & ETL Planners**: Start immediately with independent analysis
-2. **Service Planner**: Runs in parallel, monitors database outputs for integration
-3. **API Planner**: Executes concurrently, integrates service specifications when ready
+| Requirement Type | Database | ETL | Service | API | Indicators |
+|-----------------|----------|-----|---------|-----|------------|
+| **Schema Changes** | ✅ | - | - | - | "add table", "new column", "index", "migration", "constraint" |
+| **ETL Pipeline** | ✅* | ✅ | - | - | "data import", "excel processing", "ETL job", "data transformation" |
+| **Business Logic** | ✅* | - | ✅ | - | "calculation", "validation rule", "business process", "service layer" |
+| **New API Endpoint** | ✅* | - | ✅ | ✅ | "endpoint", "REST API", "controller", "HTTP", "request/response" |
+| **Data Model Only** | ✅ | - | - | - | "entity", "model", "EF Core", "DbContext" (no service/API mentions) |
+| **Service Refactor** | - | - | ✅ | - | "refactor service", "business logic change" (no schema/API changes) |
+| **API Contract Change** | - | - | ✅* | ✅ | "update endpoint", "change response", "API versioning" |
+| **Performance Optimization** | ✅* | ✅* | ✅* | ✅* | Analyze which layer needs optimization |
+
+**Legend**: ✅ = Required, ✅* = Conditionally Required, - = Not Needed
+
+#### 🧠 Planner Selection Logic
+
+```
+1. ALWAYS analyze ticket for explicit scope indicators
+2. Default to MINIMAL planner set (avoid over-planning)
+3. Deploy dependent planners only when necessary:
+   - ETL changes → Database (if new tables/columns needed)
+   - Service changes → Database (if data model changes)
+   - API changes → Service (always) + Database (if new data)
+4. NEVER deploy planners "just in case"
+```
+
+#### 📋 Common Scenarios
+
+**Scenario 1: Database Schema Only**
+```
+Ticket: "Add jersey_number column to players table"
+Deploy: Database Planner ONLY
+Rationale: Pure schema change, no business logic/API impact
+```
+
+**Scenario 2: New ETL Pipeline**
+```
+Ticket: "Import match statistics from Excel file"
+Deploy: Database Planner + ETL Planner
+Rationale: Needs schema for storage + ETL processing logic
+```
+
+**Scenario 3: New API Endpoint**
+```
+Ticket: "Add GET /api/players/{id}/statistics endpoint"
+Deploy: Database + Service + API Planners
+Rationale: Full stack - may need schema + business logic + API contract
+```
+
+**Scenario 4: Service Layer Refactor**
+```
+Ticket: "Refactor player statistics calculation logic"
+Deploy: Service Planner ONLY
+Rationale: Pure business logic, no schema/API contract changes
+```
+
+**Scenario 5: API Contract Update**
+```
+Ticket: "Add pagination to existing team list endpoint"
+Deploy: Service + API Planners
+Rationale: Service layer pagination + API response changes (no schema)
+```
+
+#### 🚦 Deployment Decision Process
+
+```markdown
+After analyzing ticket:
+
+IF (requires schema changes OR new data models)
+  → Deploy Database Planner
+
+IF (requires Excel import OR data transformation OR external data source)
+  → Deploy ETL Planner
+  → Deploy Database Planner (if new tables needed)
+
+IF (requires business logic OR calculations OR validation rules)
+  → Deploy Service Planner
+  → Deploy Database Planner (if data model changes)
+
+IF (requires new/modified endpoints OR API contract changes)
+  → Deploy API Planner
+  → Deploy Service Planner (always needed for API)
+  → Deploy Database Planner (if new data needed)
+```
+
+### Step 3: Deploy Specialist Planning Agents (Conditionally)
+
+**Based on Step 2.5 analysis**, I deploy ONLY the necessary specialist agents concurrently to maximize efficiency while avoiding unnecessary planning work.
+
+#### 🚀 Conditional Parallel Execution Strategy
+
+**Key Principle**: Deploy minimal required planners, execute them in parallel when independent.
+
+**Coordination Rules**:
+- **Independent Planners** (Database, ETL): Can start immediately in parallel
+- **Dependent Planners** (Service, API): May need to monitor other planners' outputs
+- **Single Planner Deployments**: Execute immediately without coordination overhead
+
+**Example Deployments**:
+```
+Database Only:    [Database Planner] → Complete
+ETL Pipeline:     [Database Planner] + [ETL Planner] → Parallel execution
+New API:          [Database] + [Service] + [API] → Coordinated parallel
+Service Refactor: [Service Planner] → Complete
+```
 
 #### Database Specialist Agent (Priority: 1)
 ```prompt
@@ -246,9 +374,18 @@ COORDINATION: Wait for service specifications before finalizing API contracts
 
 ### Step 4: Confidence Assessment & Iteration
 
-After all specialists complete their analysis:
+After **deployed specialists** complete their analysis (not all planners, only those selected in Step 2.5):
 
-1. **Collect Confidence Scores**:
+1. **Collect Confidence Scores from Deployed Planners Only**:
+
+   **Example 1: Database-Only Change**
+   ```json
+   {
+     "database": { "confidence": 9, "risks": ["index rebuild time"] }
+   }
+   ```
+
+   **Example 2: Full Stack Feature**
    ```json
    {
      "database": { "confidence": 8, "risks": ["complex migration"] },
@@ -258,21 +395,32 @@ After all specialists complete their analysis:
    }
    ```
 
+   **Example 3: Service Refactor**
+   ```json
+   {
+     "services": { "confidence": 8, "risks": ["backward compatibility"] }
+   }
+   ```
+
 2. **Risk Aggregation**:
-   - Identify cross-component risks
-   - Assess dependency chains
-   - Calculate overall project confidence
+   - Identify cross-component risks **for deployed planners only**
+   - Assess dependency chains **based on actual deployment**
+   - Calculate overall project confidence **from active planners**
+   - **Note**: Absence of a planner means that layer has no changes (0 risk)
 
 3. **Iterative Refinement**:
-   If any confidence < 8:
+   If **any deployed planner** has confidence < 8:
    - Generate specific questions
    - Request stakeholder input
    - Conduct technical research
    - Re-plan with additional context
+   - **May deploy additional planners** if new requirements discovered
 
 ### Step 5: Master Implementation Plan Generation
 
-Create `implementation.md` with:
+Create `implementation.md` with **ONLY sections for deployed planners**:
+
+#### Template Structure (Conditional Sections)
 
 ```markdown
 # Implementation Plan: JIRA-{TICKET-ID}
@@ -280,31 +428,117 @@ Create `implementation.md` with:
 ## Executive Summary
 [Business value and technical approach]
 
+## Scope
+**Affected Layers**: [List only: Database | ETL | Service | API - based on deployed planners]
+
 ## Implementation Sequence
+[ONLY include sections for layers with deployed planners]
+
+{{IF database planner deployed}}
 1. **Database Changes** (Lead time: X days)
-2. **ETL Pipeline Updates** (Dependencies: Database)
-3. **Service Layer Implementation** (Dependencies: Database, ETL)
-4. **API Layer Development** (Dependencies: Services)
-5. **Frontend Integration** (Dependencies: API)
+   - Schema modifications
+   - Migration strategy
+   - Rollback procedures
+{{END IF}}
+
+{{IF etl planner deployed}}
+2. **ETL Pipeline Updates** (Lead time: X days, Dependencies: Database if applicable)
+   - Data flow changes
+   - Transformation logic
+   - Error handling
+{{END IF}}
+
+{{IF service planner deployed}}
+3. **Service Layer Implementation** (Lead time: X days, Dependencies: Database/ETL if applicable)
+   - Business logic updates
+   - Interface changes
+   - Unit testing strategy
+{{END IF}}
+
+{{IF api planner deployed}}
+4. **API Layer Development** (Lead time: X days, Dependencies: Service)
+   - Endpoint changes
+   - Contract updates
+   - Integration testing
+{{END IF}}
 
 ## Risk Register
-[Consolidated risks from all specialists]
+[Consolidated risks from DEPLOYED SPECIALISTS ONLY]
 
 ## Success Metrics
-[Measurable outcomes and acceptance criteria]
+[Measurable outcomes specific to affected layers]
 
 ## Rollback Strategy
-[How to safely reverse changes if needed]
+[Rollback procedures for CHANGED LAYERS ONLY]
+```
+
+#### Example Outputs
+
+**Example 1: Database-Only Change**
+```markdown
+# Implementation Plan: JIRA-123
+
+## Executive Summary
+Add jersey_number column to players table for roster management.
+
+## Scope
+**Affected Layers**: Database
+
+## Implementation Sequence
+1. **Database Changes** (Lead time: 1 day)
+   - Add jersey_number column (int, nullable initially)
+   - Add unique constraint on (team_id, jersey_number)
+   - Backfill existing data
+   - Make column non-nullable
+
+## Risk Register
+- Index rebuild time on large players table (mitigation: off-peak deployment)
+
+## Success Metrics
+- All players have valid jersey numbers (1-99)
+- No duplicate jerseys per team
+
+## Rollback Strategy
+- Drop column if issues detected within 24 hours
+```
+
+**Example 2: Service-Only Refactor**
+```markdown
+# Implementation Plan: JIRA-456
+
+## Executive Summary
+Optimize player statistics calculation for improved performance.
+
+## Scope
+**Affected Layers**: Service
+
+## Implementation Sequence
+1. **Service Layer Implementation** (Lead time: 3 days)
+   - Refactor StatisticsCalculator to use caching
+   - Implement batch processing for multiple players
+   - Add performance metrics logging
+
+## Risk Register
+- Backward compatibility with existing consumers (mitigation: comprehensive unit tests)
+
+## Success Metrics
+- Calculation time reduced by 50%
+- All existing unit tests pass
+- No API contract changes
+
+## Rollback Strategy
+- Feature flag to revert to old calculation method
 ```
 
 ## 🎯 Quality Gates
 
 Before plan approval, I verify:
-- ✅ All specialists confidence ≥ 8/10
-- ✅ Cross-component dependencies mapped
-- ✅ Risk mitigation strategies defined
-- ✅ Resource estimates validated
-- ✅ Success criteria measurable
+- ✅ **Deployed specialists only** have confidence ≥ 8/10
+- ✅ Cross-component dependencies mapped **for affected layers**
+- ✅ Risk mitigation strategies defined **for changed components**
+- ✅ Resource estimates validated **for actual work scope**
+- ✅ Success criteria measurable **for implemented changes**
+- ✅ **No unnecessary planners deployed** (efficiency check)
 
 ## 🚀 Execution Trigger
 
@@ -316,29 +550,52 @@ Upon plan completion:
 
 ---
 
-## 🚀 Parallel Execution Implementation
+## 🚀 Intelligent Execution Implementation
 
 **Initiating Planning Session for JIRA-$ARGUMENTS...**
 
-### Phase 1: Context Gathering
-I'll first gather requirements and examine the codebase to provide context to all planners.
+### Phase 1: Context Gathering & Scope Analysis
+I'll first:
+1. **Fetch JIRA ticket** to understand requirements
+2. **Examine codebase** to understand current architecture
+3. **Analyze scope** using decision matrix (Step 2.5)
+4. **Determine required planners** (minimal necessary set)
+5. **Create scope_analysis.md** documenting planner selection rationale
 
-### Phase 2: Parallel Planner Deployment
-Using **concurrent Task calls**, I'll deploy all specialists simultaneously:
+### Phase 2: Conditional Planner Deployment
 
+**IMPORTANT**: I deploy **ONLY the necessary planners** based on scope analysis.
+
+**Deployment Strategy**:
 ```
-Task Call 1: Database Planner (database-planner.md) - Priority: Foundational
-Task Call 2: ETL Planner (etl-planner.md) - Priority: Independent
-Task Call 3: Service Planner (service-planner.md) - Priority: Coordination
-Task Call 4: API Planner (api-planner.md) - Priority: Integration
+IF Database changes needed:
+  → Deploy Database Planner (database-planner.md)
+
+IF ETL pipeline changes needed:
+  → Deploy ETL Planner (etl-planner.md)
+  → Deploy Database Planner if new schema needed
+
+IF Service layer changes needed:
+  → Deploy Service Planner (service-planner.md)
+  → Deploy Database Planner if data model changes
+
+IF API changes needed:
+  → Deploy API Planner (api-planner.md)
+  → Deploy Service Planner (always required for API)
+  → Deploy Database Planner if new data needed
 ```
 
-**Coordination Strategy:**
-- All planners start analysis immediately
-- Database planner shares schema updates in real-time
-- Service planner bridges database/ETL with API layer
-- API planner waits for service specifications before finalizing
-- ETL planner coordinates with database changes
-- All planners monitor each other's outputs for integration
+**Parallel Execution** (when multiple planners needed):
+- Independent planners (Database, ETL) execute concurrently
+- Dependent planners (Service, API) monitor upstream outputs
+- Single planner executes immediately without coordination overhead
 
-*Now I'll analyze the ticket, examine the codebase, and coordinate with specialist agents to create your comprehensive implementation plan.*
+**Example Scenarios**:
+```
+Database-only:  [Database Planner] → Done
+ETL Pipeline:   [Database + ETL Planners] → Parallel
+New Endpoint:   [Database + Service + API Planners] → Coordinated parallel
+Service Only:   [Service Planner] → Done
+```
+
+*Now I'll analyze the ticket requirements, determine the minimal planner set, and deploy only the necessary specialists to create your focused, efficient implementation plan.*

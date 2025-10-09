@@ -1,43 +1,111 @@
-using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
+using System;
+using System.Collections.Generic;
 
-namespace GAAStat.Dal.Models.application;
+namespace GAAStat.Dal.Models.Application;
 
-public partial class Match
+/// <summary>
+/// Represents a GAA match
+/// </summary>
+public class Match
 {
-    [Key]
-    public int Id { get; set; }
+    /// <summary>
+    /// Primary key
+    /// </summary>
+    public int MatchId { get; set; }
 
-    [Required]
+    /// <summary>
+    /// Foreign key to Competition
+    /// </summary>
+    public int CompetitionId { get; set; }
+
+    /// <summary>
+    /// Sequential match number in season
+    /// </summary>
+    public int MatchNumber { get; set; }
+
+    /// <summary>
+    /// Foreign key to home team
+    /// </summary>
     public int HomeTeamId { get; set; }
 
-    [Required]
+    /// <summary>
+    /// Foreign key to away team
+    /// </summary>
     public int AwayTeamId { get; set; }
 
+    /// <summary>
+    /// Date of the match
+    /// </summary>
     public DateTime MatchDate { get; set; }
 
-    [StringLength(100)]
-    public string? Venue { get; set; }
+    /// <summary>
+    /// Venue: Home, Away, or Neutral
+    /// </summary>
+    public string Venue { get; set; } = string.Empty;
 
-    [StringLength(100)]
-    public string? Competition { get; set; }
+    /// <summary>
+    /// Home team score for 1st half in GAA notation (e.g., "0-04")
+    /// </summary>
+    public string? HomeScoreFirstHalf { get; set; }
 
-    public int HomeScore { get; set; }
+    /// <summary>
+    /// Home team score for 2nd half in GAA notation (e.g., "1-07")
+    /// </summary>
+    public string? HomeScoreSecondHalf { get; set; }
 
-    public int AwayScore { get; set; }
+    /// <summary>
+    /// Home team full-time score in GAA notation (e.g., "1-11")
+    /// </summary>
+    public string? HomeScoreFullTime { get; set; }
 
-    [StringLength(20)]
-    public string Status { get; set; } = "scheduled";
+    /// <summary>
+    /// Away team score for 1st half in GAA notation (e.g., "0-10")
+    /// </summary>
+    public string? AwayScoreFirstHalf { get; set; }
 
+    /// <summary>
+    /// Away team score for 2nd half in GAA notation (e.g., "0-06")
+    /// </summary>
+    public string? AwayScoreSecondHalf { get; set; }
+
+    /// <summary>
+    /// Away team full-time score in GAA notation (e.g., "0-16")
+    /// </summary>
+    public string? AwayScoreFullTime { get; set; }
+
+    /// <summary>
+    /// Record creation timestamp
+    /// </summary>
     public DateTime CreatedAt { get; set; }
 
+    /// <summary>
+    /// Record last updated timestamp
+    /// </summary>
     public DateTime UpdatedAt { get; set; }
 
-    [ForeignKey("HomeTeamId")]
+    // Navigation properties
+    /// <summary>
+    /// The competition this match belongs to
+    /// </summary>
+    public virtual Competition Competition { get; set; } = null!;
+
+    /// <summary>
+    /// The home team
+    /// </summary>
     public virtual Team HomeTeam { get; set; } = null!;
 
-    [ForeignKey("AwayTeamId")]
+    /// <summary>
+    /// The away team
+    /// </summary>
     public virtual Team AwayTeam { get; set; } = null!;
 
-    public virtual ICollection<PlayerStat> PlayerStats { get; set; } = new List<PlayerStat>();
+    /// <summary>
+    /// Team statistics for this match (6 records: 3 periods × 2 teams)
+    /// </summary>
+    public virtual ICollection<MatchTeamStatistics> TeamStatistics { get; set; } = new List<MatchTeamStatistics>();
+
+    /// <summary>
+    /// Player statistics for this match
+    /// </summary>
+    public virtual ICollection<PlayerMatchStatistics> PlayerStatistics { get; set; } = new List<PlayerMatchStatistics>();
 }
