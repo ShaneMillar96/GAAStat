@@ -58,7 +58,13 @@ public class PositionDetectionService
 
         throw new InvalidOperationException(
             $"Position code '{positionCode}' not found in database. " +
-            $"Valid codes: {string.Join(", ", _positionCache.Keys)}");
+            $"Valid codes: {string.Join(", ", _positionCache.Keys)}. " +
+            $"This error typically occurs when:\n" +
+            $"  1. Player position is missing from Excel position sheets\n" +
+            $"  2. Position sheet is corrupted or improperly formatted\n" +
+            $"  3. Player appears in player stats sheet but not in any position sheet\n" +
+            $"  4. Player name mismatch between position sheets and stats sheets\n" +
+            $"Check ETL logs for Phase 0 position enrichment warnings for more details.");
     }
 
     /// <summary>

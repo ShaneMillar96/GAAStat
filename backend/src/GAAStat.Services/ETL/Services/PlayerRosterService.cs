@@ -34,7 +34,7 @@ public class PlayerRosterService
     /// Gets or creates player using upsert logic.
     /// Strategy: Exact match → Fuzzy match (Levenshtein ≤3) → Create new
     /// </summary>
-    /// <param name="jerseyNumber">Jersey number</param>
+    /// <param name="jerseyNumber">Jersey number (for display/reporting, not used for identification)</param>
     /// <param name="playerName">Full player name</param>
     /// <param name="positionId">Position ID (GK/DEF/MID/FWD)</param>
     /// <param name="cancellationToken">Cancellation token</param>
@@ -51,62 +51,59 @@ public class PlayerRosterService
         if (jerseyNumber <= 0)
             throw new ArgumentException("Jersey number must be positive", nameof(jerseyNumber));
 
-        // Step 1: Try exact match on jersey number and name
-        var exactMatch = await FindExactMatchAsync(jerseyNumber, playerName, cancellationToken);
+        // Step 1: Try exact match on name only
+        var exactMatch = await FindExactMatchAsync(playerName, cancellationToken);
         if (exactMatch != null)
         {
-            _logger.LogDebug("Found exact match for player #{JerseyNumber} '{PlayerName}'",
-                jerseyNumber, playerName);
+            _logger.LogDebug("Found exact match for player '{PlayerName}' (ID: {PlayerId})",
+                playerName, exactMatch.PlayerId);
             return exactMatch;
         }
 
         // Step 2: Try fuzzy match on name (in case of typos)
-        var fuzzyMatch = await FindFuzzyMatchAsync(jerseyNumber, playerName, cancellationToken);
+        var fuzzyMatch = await FindFuzzyMatchAsync(playerName, cancellationToken);
         if (fuzzyMatch != null)
         {
             _logger.LogInformation(
-                "Found fuzzy match for player #{JerseyNumber} '{PlayerName}' → existing player '{ExistingName}'",
-                jerseyNumber, playerName, fuzzyMatch.FullName);
+                "Found fuzzy match for player '{PlayerName}' → existing player '{ExistingName}' (ID: {PlayerId})",
+                playerName, fuzzyMatch.FullName, fuzzyMatch.PlayerId);
             return fuzzyMatch;
         }
 
         // Step 3: No match found - create new player
         var newPlayer = await CreatePlayerAsync(jerseyNumber, playerName, positionId, cancellationToken);
-        _logger.LogInformation("Created new player #{JerseyNumber} '{PlayerName}' (ID: {PlayerId})",
-            jerseyNumber, playerName, newPlayer.PlayerId);
+        _logger.LogInformation("Created new player '{PlayerName}' (ID: {PlayerId}, Jersey: #{JerseyNumber})",
+            playerName, newPlayer.PlayerId, jerseyNumber);
 
         return newPlayer;
     }
 
     /// <summary>
-    /// Finds player by exact jersey number and name match.
+    /// Finds player by exact name match.
     /// </summary>
     private async Task<Player?> FindExactMatchAsync(
-        int jerseyNumber,
         string playerName,
         CancellationToken cancellationToken)
     {
         var normalizedName = NormalizeName(playerName);
 
         return await _dbContext.Players
-            .Where(p => p.JerseyNumber == jerseyNumber &&
-                       p.FullName.ToLower() == normalizedName)
+            .Where(p => p.FullName.ToLower() == normalizedName)
             .FirstOrDefaultAsync(cancellationToken);
     }
 
     /// <summary>
-    /// Finds player by jersey number and fuzzy name match (Levenshtein distance ≤3).
+    /// Finds player by fuzzy name match (Levenshtein distance ≤3).
     /// </summary>
     private async Task<Player?> FindFuzzyMatchAsync(
-        int jerseyNumber,
         string playerName,
         CancellationToken cancellationToken)
     {
         var normalizedName = NormalizeName(playerName);
 
-        // Get all players with same jersey number
+        // Get all active players
         var candidatePlayers = await _dbContext.Players
-            .Where(p => p.JerseyNumber == jerseyNumber)
+            .Where(p => p.IsActive)
             .ToListAsync(cancellationToken);
 
         // Find best fuzzy match using Levenshtein distance

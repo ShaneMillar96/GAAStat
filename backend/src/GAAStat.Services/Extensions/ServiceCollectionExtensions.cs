@@ -32,6 +32,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<PlayerRosterService>();
         services.AddScoped<PositionDetectionService>();
 
+        // Position enrichment services
+        services.AddScoped<IExcelPositionSheetReader, ExcelPositionSheetReader>();
+
         return services;
     }
 }
