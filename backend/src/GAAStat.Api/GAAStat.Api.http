@@ -4,3 +4,16 @@ GET {{GAAStat.Api_HostAddress}}/weatherforecast/
 Accept: application/json
 
 ###
+
+# ETL - Upload Match Statistics Excel File
+POST {{GAAStat.Api_HostAddress}}/api/etl/match-statistics/upload
+Content-Type: multipart/form-data; boundary=----WebKitFormBoundary
+
+------WebKitFormBoundary
+Content-Disposition: form-data; name="file"; filename="Drum Analysis 2025.xlsx"
+Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+
+< /Users/shane.millar/Desktop/Drum Analysis 2025.xlsx
+------WebKitFormBoundary--
+
+###

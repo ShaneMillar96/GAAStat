@@ -809,6 +809,250 @@ Store as VARCHAR in database; parse when calculating totals.
 
 ---
 
+## Development Notes & Known Issues
+
+### Excel File Limitations & Workarounds
+
+#### 31-Character Sheet Name Limit (CRITICAL)
+
+Excel enforces a **31-character maximum** for sheet names. This limitation significantly impacts match sheet detection in the ETL pipeline.
+
+**Problem:**
+- 7 of 9 match sheets are truncated to exactly 31 characters
+- Truncation removes date information needed for parsing
+- Original pattern matching failed for truncated sheets
+
+**Examples of Truncation:**
+```
+Original:  "09. Championship vs Slaughtmanus 26.09.25"  (45 chars)
+Truncated: "09. Championship vs Slaughtmanu"           (31 chars - date lost!)
+
+Original:  "03. League vs Moneymore 15.06.25"          (33 chars)
+Truncated: "03. League vs Moneymore 15.06.2"          (31 chars - year digit lost!)
+```
+
+**Solution:**
+Cell B1 (Row 1, Column 2) contains the **complete match metadata** even when sheet names are truncated.
+
+- **Cell B1 Format:** `"[number]. [competition] Drum vs [opponent] DD.MM.YY"`
+- **Example:** `"09. Championship Drum vs Slaughtmanus 26.09.25"`
+- **Note:** Cell B1 includes "Drum" in the pattern (unlike sheet names)
+
+**Implementation Reference:**
+- See `ExcelMatchDataReader.cs:106` - Reads Cell B1 for authoritative metadata
+- See `ExcelMatchDataReader.cs:20` - CellA1Pattern regex (note: variable name is legacy, actually parses Cell B1)
+
+**Key Takeaway:** Always read match metadata from Cell B1, not from sheet names. Sheet names are only used for initial sheet detection.
+
+---
+
+### ETL Pattern Matching Considerations
+
+#### Multi-Word Competition Name Support
+
+The regex pattern for detecting match sheets must support multi-word competition names.
+
+**Problem:**
+- Original pattern: `^(\d+)\.\s+(\w+)\s+vs\s+`
+- `(\w+)` only matches single words (no spaces)
+- Failed to detect "01. Neal Carlin vs Magilligan" (two-word competition)
+
+**Solution:**
+- Updated pattern: `^(\d+)\.\s+(.+?)\s+vs\s+`
+- `(.+?)` matches any characters (non-greedy) including spaces
+- Successfully handles both single-word ("Championship") and multi-word ("Neal Carlin") competition names
+
+**Implementation Reference:**
+- See `ExcelMatchDataReader.cs:18` - MatchSheetPattern regex with multi-word support
+
+**Pattern Breakdown:**
+```regex
+^(\d+)\.\s+(.+?)\s+vs\s+
+│  │    │   │     │
+│  │    │   │     └─ Literal " vs " separator
+│  │    │   └─ Non-greedy: captures competition name (single or multi-word)
+│  │    └─ Literal ". " separator
+│  └─ Capture group 1: Match number (digits)
+└─ Start of string
+```
+
+**Why Non-Greedy (`?`)?**
+- Greedy `(.+)` would capture too much: "Neal Carlin vs Magilligan"
+- Non-greedy `(.+?)` stops at first " vs ": captures only "Neal Carlin"
+
+---
+
+### Development Workflow Best Practices
+
+#### Building and Testing
+
+**Always Use Full Rebuild When Making Code Changes:**
+```bash
+# CORRECT: Clean build ensures latest code
+dotnet clean && dotnet build
+
+# INCORRECT: --no-build may use stale compiled code
+dotnet run --no-build
+```
+
+**Why This Matters:**
+- Using `--no-build` flag runs previously compiled assemblies
+- Code changes won't be reflected until a full rebuild
+- Can cause hours of debugging confusion
+
+**Server Restart After Code Changes:**
+```bash
+# Kill existing API server
+pkill -f "dotnet run" && pkill -f "GAAStat.Api"
+
+# Start fresh with updated code
+MAX_FILE_SIZE_MB=80 dotnet run --urls "http://localhost:5025"
+```
+
+#### Testing File Uploads
+
+**Using curl:**
+```bash
+curl -X POST \
+  -F "file=@/Users/shane.millar/Desktop/Drum Analysis 2025.xlsx" \
+  http://localhost:5025/api/Etl/match-statistics/upload
+```
+
+**Using Python (Recommended for Large Files):**
+```python
+import requests
+
+file_path = "/Users/shane.millar/Desktop/Drum Analysis 2025.xlsx"
+url = "http://localhost:5025/api/Etl/match-statistics/upload"
+
+with open(file_path, 'rb') as f:
+    files = {'file': ('Drum Analysis 2025.xlsx', f,
+                      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')}
+    response = requests.post(url, files=files, timeout=180)
+
+print(f"Status: {response.status_code}")
+print(f"Response: {response.text}")
+```
+
+**Why Python?**
+- Better timeout control for large files (78MB Excel file)
+- More reliable for multi-part form uploads
+- Clearer error messages
+
+---
+
+### Environment Configuration
+
+#### Database Access
+
+**Database Name:** `gaastat-dev` (NOT `gaastat` or `gaa_statistics`)
+
+**Access Commands:**
+```bash
+# List databases
+docker compose exec -T db psql -U gaastat -l
+
+# Run query
+docker compose exec -T db psql -U gaastat -d gaastat-dev -c "SELECT COUNT(*) FROM matches;"
+
+# Interactive session
+docker compose exec db psql -U gaastat -d gaastat-dev
+```
+
+#### API Endpoints
+
+**ETL Upload Endpoint (Case-Sensitive):**
+- ✅ Correct: `/api/Etl/match-statistics/upload` (capital 'E' in Etl)
+- ❌ Wrong: `/api/etl/upload-match-statistics`
+
+**OpenAPI Documentation:**
+```bash
+# View API schema
+curl http://localhost:5025/openapi/v1.json
+```
+
+---
+
+### ETL Validation Checklist
+
+#### Expected Results After Full ETL Run
+
+**Match Detection:**
+- ✅ 9 match sheets should be detected
+- ✅ All sheets processed (including truncated names)
+- ✅ Multi-word competition names handled
+
+**Database Records:**
+- ✅ 9 matches in `matches` table
+- ✅ 54 team statistics in `match_team_statistics` (9 × 3 periods × 2 teams)
+- ✅ Competitions: League (6), Championship (2), Cup/Neal Carlin (1)
+
+**Verification Queries:**
+```sql
+-- Count matches
+SELECT COUNT(*) as total_matches FROM matches;
+-- Expected: 9
+
+-- Count team statistics
+SELECT COUNT(*) as total_team_stats FROM match_team_statistics;
+-- Expected: 54
+
+-- List all matches with competitions
+SELECT match_number, competition_id, match_date
+FROM matches
+ORDER BY match_number;
+-- Expected: All 9 matches present
+```
+
+**Running Verification:**
+```bash
+docker compose exec -T db psql -U gaastat -d gaastat-dev \
+  -c "SELECT COUNT(*) FROM matches;" \
+  -c "SELECT COUNT(*) FROM match_team_statistics;" \
+  -c "SELECT match_number, competition_id FROM matches ORDER BY match_number;"
+```
+
+#### Common Error Patterns
+
+**"Found 2 match sheets" (should be 9)**
+- **Cause:** Using old compiled code with original regex pattern
+- **Solution:** Run `dotnet clean && dotnet build` and restart server
+
+**"Match X already exists"**
+- **Cause:** Re-running ETL with same data
+- **Solution:** Expected behavior - ETL prevents duplicates
+
+**"Metadata file could not be found: Microsoft.EntityFrameworkCore.Relational"**
+- **Cause:** EF Core version conflicts between projects
+- **Solution:** Ensure consistent EF Core versions (9.0.8) across all projects
+
+**"Invalid match metadata format in Cell B1"**
+- **Cause:** Cell B1 doesn't match expected pattern with "Drum"
+- **Check:** Verify Cell B1 format: `"[number]. [competition] Drum vs [opponent] [date]"`
+
+---
+
+### Code References
+
+**Key Files for Match ETL:**
+- `ExcelMatchDataReader.cs` - Excel parsing logic
+  - Line 18: MatchSheetPattern (multi-word support)
+  - Line 20: CellA1Pattern (Cell B1 metadata parsing)
+  - Line 87-92: IsMatchSheet() - Sheet detection
+  - Line 97-122: ExtractMatchData() - Cell B1 reading
+  - Line 130-179: ParseMatchMetadata() - Dual parsing (Cell B1 + sheet name)
+  - Line 184-198: NormalizeCompetitionType() - Validation
+
+- `MatchDataLoader.cs` - Database persistence
+- `MatchStatisticsEtlService.cs` - Pipeline orchestration
+- `EtlController.cs` - API endpoint
+
+**Related JIRA Tickets:**
+- GAAS-4: Initial database schema and ETL implementation
+- GAAS-5: Excel sheet name truncation fix (this implementation)
+
+---
+
 ## Future Enhancements
 
 ### Planned Features
@@ -834,10 +1078,11 @@ Store as VARCHAR in database; parse when calculating totals.
 
 **Related JIRA Tickets:**
 - GAAS-4: Create Comprehensive Database Schema for Drum Analysis 2025 Excel Data Structure
+- GAAS-5: Fix Excel Sheet Name Truncation Issue in ETL Pipeline
 
 **Excel Source File:** `/Users/shane.millar/Desktop/Drum Analysis 2025.xlsx`
 
 ---
 
 *Last Updated: 2025-10-09*
-*Document Version: 1.0*
+*Document Version: 1.1 - Added Development Notes & Known Issues section*
