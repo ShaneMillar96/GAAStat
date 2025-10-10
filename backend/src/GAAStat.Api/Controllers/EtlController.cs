@@ -36,11 +36,11 @@ public class EtlController : ControllerBase
     }
 
     /// <summary>
-    /// Upload and process a GAA statistics Excel file (match and player statistics)
+    /// Upload and process a GAA statistics Excel file (match statistics, player statistics, and KPI definitions)
     /// </summary>
-    /// <param name="file">Excel file containing GAA statistics (match and player data)</param>
+    /// <param name="file">Excel file containing GAA statistics (match data, player data, and KPI definitions)</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>ETL operation result with comprehensive statistics</returns>
+    /// <returns>ETL operation result with comprehensive statistics including KPI definitions</returns>
     [HttpPost("gaa-statistics/upload")]
     [ProducesResponseType(typeof(EtlUploadResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(EtlUploadResponse), StatusCodes.Status400BadRequest)]
@@ -80,18 +80,24 @@ public class EtlController : ControllerBase
                 tempFilePath,
                 cancellationToken);
 
-            // Execute Player ETL pipeline (only if match ETL succeeded)
+            // Execute Player ETL pipeline
             var playerResult = await _playerEtlService.ProcessPlayerStatisticsAsync(
                 tempFilePath,
                 cancellationToken);
 
-            // Calculate combined duration
-            var totalDuration = matchResult.Duration + playerResult.Duration;
+            // Execute KPI Definitions ETL pipeline
+            _logger.LogInformation("Starting KPI Definitions ETL pipeline for file: {FileName}", file.FileName);
+            var kpiResult = await _kpiEtlService.ProcessKpiDefinitionsAsync(
+                tempFilePath,
+                cancellationToken);
 
-            // Map to API response - combine results from both ETL operations
+            // Calculate combined duration
+            var totalDuration = matchResult.Duration + playerResult.Duration + kpiResult.Duration;
+
+            // Map to API response - combine results from all ETL operations
             var response = new EtlUploadResponse
             {
-                Success = matchResult.Success && playerResult.Success,
+                Success = matchResult.Success && playerResult.Success && kpiResult.Success,
 
                 // Match statistics
                 MatchesProcessed = matchResult.MatchesProcessed,
@@ -106,10 +112,15 @@ public class EtlController : ControllerBase
                 ValidationErrorsTotal = playerResult.ValidationErrorsTotal,
                 ValidationWarningsTotal = playerResult.ValidationWarningsTotal,
 
+                // KPI definitions
+                KpiDefinitionsCreated = kpiResult.KpiDefinitionsCreated,
+                KpiDefinitionsUpdated = kpiResult.KpiDefinitionsUpdated,
+                KpiDefinitionsSkipped = kpiResult.KpiDefinitionsSkipped,
+
                 // Combined metrics
                 DurationSeconds = totalDuration.TotalSeconds,
 
-                // Combine warnings from both operations
+                // Combine warnings from all operations
                 Warnings = matchResult.Warnings.Select(w => new EtlWarningDto
                 {
                     Code = w.Code,
@@ -120,9 +131,14 @@ public class EtlController : ControllerBase
                     Code = w.Code,
                     Message = w.Message,
                     SheetName = w.SheetName
+                })).Concat(kpiResult.Warnings.Select(w => new EtlWarningDto
+                {
+                    Code = w.Code,
+                    Message = w.Message,
+                    SheetName = w.SheetName
                 })).ToList(),
 
-                // Combine errors from both operations
+                // Combine errors from all operations
                 Errors = matchResult.Errors.Select(e => new EtlErrorDto
                 {
                     Code = e.Code,
@@ -133,25 +149,36 @@ public class EtlController : ControllerBase
                     Code = e.Code,
                     Message = e.Message,
                     SheetName = e.SheetName
+                })).Concat(kpiResult.Errors.Select(e => new EtlErrorDto
+                {
+                    Code = e.Code,
+                    Message = e.Message,
+                    SheetName = e.SheetName
                 })).ToList()
             };
 
             if (response.Success)
             {
                 _logger.LogInformation(
-                    "GAA Statistics ETL completed successfully. Matches: {Matches}, Team Stats: {TeamStats}, Player Stats: {PlayerStats}, Players Created: {PlayersCreated}, Duration: {Duration}s",
+                    "GAA Statistics ETL completed successfully. " +
+                    "Matches: {Matches}, Team Stats: {TeamStats}, Player Stats: {PlayerStats}, Players Created: {PlayersCreated}, " +
+                    "KPIs Created: {KpisCreated}, KPIs Updated: {KpisUpdated}, Duration: {Duration}s",
                     response.MatchesProcessed,
                     response.TeamStatisticsCreated,
                     response.PlayerStatisticsCreated,
                     response.PlayersCreated,
+                    response.KpiDefinitionsCreated,
+                    response.KpiDefinitionsUpdated,
                     response.DurationSeconds);
             }
             else
             {
                 _logger.LogError(
-                    "GAA Statistics ETL completed with errors. Matches: {Matches}, Player Stats: {PlayerStats}, Errors: {ErrorCount}",
+                    "GAA Statistics ETL completed with errors. " +
+                    "Matches: {Matches}, Player Stats: {PlayerStats}, KPIs Processed: {KpisProcessed}, Errors: {ErrorCount}",
                     response.MatchesProcessed,
                     response.PlayerStatisticsCreated,
+                    response.KpiDefinitionsCreated + response.KpiDefinitionsUpdated + response.KpiDefinitionsSkipped,
                     response.Errors.Count);
             }
 

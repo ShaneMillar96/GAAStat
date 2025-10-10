@@ -56,6 +56,21 @@ public class EtlUploadResponse
     public int ValidationWarningsTotal { get; set; }
 
     /// <summary>
+    /// Number of KPI definitions created
+    /// </summary>
+    public int KpiDefinitionsCreated { get; set; }
+
+    /// <summary>
+    /// Number of KPI definitions updated
+    /// </summary>
+    public int KpiDefinitionsUpdated { get; set; }
+
+    /// <summary>
+    /// Number of KPI definitions skipped (unchanged)
+    /// </summary>
+    public int KpiDefinitionsSkipped { get; set; }
+
+    /// <summary>
     /// Duration of ETL operation in seconds
     /// </summary>
     public double DurationSeconds { get; set; }
