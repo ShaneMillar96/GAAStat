@@ -368,11 +368,88 @@ Test Excel file is created dynamically using `ExcelTestFileBuilder`:
 
 ---
 
+## KPI Definitions ETL (GAAS-7)
+
+### Overview
+
+The KPI Definitions ETL module imports KPI metric definitions from the "KPI Definitions" Excel sheet into the database. Supports idempotent upsert operations (creates new definitions and updates existing ones).
+
+### Usage
+
+```csharp
+var etlService = serviceProvider.GetRequiredService<IKpiDefinitionsEtlService>();
+
+var result = await etlService.ProcessKpiDefinitionsAsync(
+    "/path/to/Drum Analysis 2025.xlsx",
+    cancellationToken);
+
+if (result.Success)
+{
+    Console.WriteLine($"✅ Success! Created: {result.KpiDefinitionsCreated}, Updated: {result.KpiDefinitionsUpdated}");
+}
+```
+
+### Excel Sheet Structure
+
+**Sheet Name:** "KPI Definitions"
+
+| Column | Header | Data Type | Example |
+|--------|--------|-----------|---------|
+| A | Event # | Integer | 1, 2, 3 |
+| B | Event Name | String | "Kickout", "Attacks" |
+| C | Outcome | String | "Won clean", "Point" |
+| D | Assign to which team | String | "Home", "Opposition", "Both" |
+| E | PSR Value | Decimal | 1.0, 2.0, 3.0 |
+| F | Definition | String | "A kickout won clean..." |
+
+### Validation Rules
+
+1. Event Number must be > 0
+2. Event Name: 1-100 characters, required
+3. Outcome: 1-100 characters, required
+4. Team Assignment: Must be "Home", "Opposition", or "Both" (case-insensitive, auto-corrects "Oppostion" typo)
+5. PSR Value: 0.0-10.0 range
+6. Definition: Up to 1000 characters
+7. No duplicate combinations of (Event Number, Event Name, Outcome, Team Assignment)
+
+### Upsert Logic
+
+Unique key: `(event_number, event_name, outcome, team_assignment)`
+
+- If KPI exists: Updates PSR Value and Definition if changed
+- If KPI is new: Inserts new record
+- If KPI unchanged: Skips (no database operation)
+
+### Performance
+
+- **~50 KPIs**: < 2 seconds
+- **Idempotent**: Safe to re-run multiple times
+- **Transactional**: All-or-nothing per batch
+
+### API Endpoint
+
+```
+POST /api/Etl/kpi-definitions/upload
+Content-Type: multipart/form-data
+
+Response: KpiDefinitionsEtlResponse
+{
+  "success": true,
+  "kpiDefinitionsCreated": 47,
+  "kpiDefinitionsUpdated": 0,
+  "kpiDefinitionsSkipped": 0,
+  "rowsProcessed": 47,
+  "durationSeconds": 1.234
+}
+```
+
+---
+
 ## Future Enhancements
 
 ### Planned Features
-1. **Player Statistics ETL** (GAAS-6) - Import player-level performance data
-2. **KPI Definitions ETL** (GAAS-7) - Import metric definitions
+1. **Player Statistics ETL** (GAAS-6) - ✅ Completed
+2. **KPI Definitions ETL** (GAAS-7) - ✅ Completed
 3. **Batch Processing** - Process multiple Excel files in parallel
 4. **Progress Reporting** - Real-time progress updates via SignalR
 5. **Update Mode** - Allow updating existing matches instead of duplicate error

@@ -397,6 +397,11 @@ public class GAAStatDbContext : DbContext, IGAAStatDbContext
 
             entity.HasIndex(e => new { e.EventNumber, e.EventName }).HasDatabaseName("idx_kpi_event");
             entity.HasIndex(e => e.Outcome).HasDatabaseName("idx_kpi_outcome");
+
+            // Add unique constraint on natural key (GAAS-7)
+            entity.HasIndex(e => new { e.EventNumber, e.EventName, e.Outcome, e.TeamAssignment })
+                .IsUnique()
+                .HasDatabaseName("idx_kpi_definitions_unique_key");
         });
     }
 }

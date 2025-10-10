@@ -35,6 +35,12 @@ public static class ServiceCollectionExtensions
         // Position enrichment services
         services.AddScoped<IExcelPositionSheetReader, ExcelPositionSheetReader>();
 
+        // KPI Definitions ETL services (GAAS-7)
+        services.AddScoped<IKpiDefinitionsEtlService, KpiDefinitionsEtlService>();
+        services.AddScoped<ExcelKpiDataReader>();
+        services.AddScoped<KpiDataTransformer>();
+        services.AddScoped<KpiDataLoader>();
+
         return services;
     }
 }

@@ -13,6 +13,7 @@ public class EtlController : ControllerBase
 {
     private readonly IMatchStatisticsEtlService _matchEtlService;
     private readonly IPlayerStatisticsEtlService _playerEtlService;
+    private readonly IKpiDefinitionsEtlService _kpiEtlService;
     private readonly ILogger<EtlController> _logger;
     private readonly IConfiguration _configuration;
 
@@ -23,11 +24,13 @@ public class EtlController : ControllerBase
     public EtlController(
         IMatchStatisticsEtlService matchEtlService,
         IPlayerStatisticsEtlService playerEtlService,
+        IKpiDefinitionsEtlService kpiEtlService,
         ILogger<EtlController> logger,
         IConfiguration configuration)
     {
         _matchEtlService = matchEtlService;
         _playerEtlService = playerEtlService;
+        _kpiEtlService = kpiEtlService;
         _logger = logger;
         _configuration = configuration;
     }
@@ -264,5 +267,161 @@ public class EtlController : ControllerBase
         await file.CopyToAsync(stream, cancellationToken);
 
         return tempFilePath;
+    }
+
+    /// <summary>
+    /// Upload and process Excel file containing KPI metric definitions
+    /// </summary>
+    /// <param name="file">Excel file (.xlsx or .xls) containing KPI Definitions sheet</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>ETL operation result with KPI import statistics</returns>
+    /// <remarks>
+    /// Expected Excel structure:
+    /// - Sheet name: "KPI Definitions"
+    /// - Headers: Event #, Event Name, Outcome, Assign to which team, PSR Value, Definition
+    /// - Data rows follow headers
+    ///
+    /// File constraints:
+    /// - Max size: 100MB
+    /// - Allowed formats: .xlsx, .xls
+    ///
+    /// Processing behavior:
+    /// - Creates new KPI definitions
+    /// - Updates existing definitions if unique key matches
+    /// - Skips rows with validation errors (reports in Errors list)
+    /// - Returns partial success if some rows processed successfully
+    /// </remarks>
+    [HttpPost("kpi-definitions/upload")]
+    [Consumes("multipart/form-data")]
+    [Produces("application/json")]
+    [ProducesResponseType(typeof(KpiDefinitionsEtlResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(KpiDefinitionsEtlResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(KpiDefinitionsEtlResponse), StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<KpiDefinitionsEtlResponse>> UploadKpiDefinitions(
+        IFormFile file,
+        CancellationToken cancellationToken)
+    {
+        string? tempFilePath = null;
+
+        try
+        {
+            // Validate file upload
+            var validationError = ValidateFile(file);
+            if (validationError != null)
+            {
+                _logger.LogWarning("File validation failed: {Error}", validationError.Message);
+                return BadRequest(new KpiDefinitionsEtlResponse
+                {
+                    Success = false,
+                    Errors = new List<EtlErrorDto> { validationError }
+                });
+            }
+
+            _logger.LogInformation(
+                "Received KPI Definitions file upload: {FileName} ({FileSize} bytes)",
+                file.FileName,
+                file.Length);
+
+            // Save file to temp location
+            tempFilePath = await SaveFileToTempAsync(file, cancellationToken);
+            _logger.LogInformation("File saved to temp location: {TempPath}", tempFilePath);
+
+            // Execute KPI ETL pipeline
+            _logger.LogInformation("Starting KPI Definitions ETL pipeline for file: {FileName}", file.FileName);
+            var kpiResult = await _kpiEtlService.ProcessKpiDefinitionsAsync(
+                tempFilePath,
+                cancellationToken);
+
+            // Map to API response
+            var response = new KpiDefinitionsEtlResponse
+            {
+                Success = kpiResult.Success,
+                KpiDefinitionsCreated = kpiResult.KpiDefinitionsCreated,
+                KpiDefinitionsUpdated = kpiResult.KpiDefinitionsUpdated,
+                KpiDefinitionsSkipped = kpiResult.KpiDefinitionsSkipped,
+                RowsProcessed = kpiResult.KpiDefinitionsCreated + kpiResult.KpiDefinitionsUpdated + kpiResult.KpiDefinitionsSkipped,
+                DurationSeconds = kpiResult.Duration.TotalSeconds,
+                SheetName = kpiResult.SheetName,
+                Warnings = kpiResult.Warnings.Select(w => new EtlWarningDto
+                {
+                    Code = w.Code,
+                    Message = w.Message,
+                    SheetName = w.SheetName
+                }).ToList(),
+                Errors = kpiResult.Errors.Select(e => new EtlErrorDto
+                {
+                    Code = e.Code,
+                    Message = e.Message,
+                    SheetName = e.SheetName
+                }).ToList()
+            };
+
+            if (response.Success)
+            {
+                _logger.LogInformation(
+                    "KPI Definitions ETL completed successfully. Created: {Created}, Updated: {Updated}, Skipped: {Skipped}, Duration: {Duration}s",
+                    response.KpiDefinitionsCreated,
+                    response.KpiDefinitionsUpdated,
+                    response.KpiDefinitionsSkipped,
+                    response.DurationSeconds);
+            }
+            else
+            {
+                _logger.LogError(
+                    "KPI Definitions ETL completed with errors. Processed: {Processed}, Errors: {ErrorCount}",
+                    response.RowsProcessed,
+                    response.Errors.Count);
+            }
+
+            return Ok(response);
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogWarning("KPI Definitions ETL operation was cancelled");
+            return Ok(new KpiDefinitionsEtlResponse
+            {
+                Success = false,
+                Errors = new List<EtlErrorDto>
+                {
+                    new EtlErrorDto
+                    {
+                        Code = "OPERATION_CANCELLED",
+                        Message = "ETL operation was cancelled by user"
+                    }
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error during KPI Definitions ETL operation");
+            return StatusCode(500, new KpiDefinitionsEtlResponse
+            {
+                Success = false,
+                Errors = new List<EtlErrorDto>
+                {
+                    new EtlErrorDto
+                    {
+                        Code = "UNEXPECTED_ERROR",
+                        Message = $"Unexpected error: {ex.Message}"
+                    }
+                }
+            });
+        }
+        finally
+        {
+            // Always cleanup temp file
+            if (!string.IsNullOrEmpty(tempFilePath) && System.IO.File.Exists(tempFilePath))
+            {
+                try
+                {
+                    System.IO.File.Delete(tempFilePath);
+                    _logger.LogInformation("Temp file deleted: {TempPath}", tempFilePath);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to delete temp file: {TempPath}", tempFilePath);
+                }
+            }
+        }
     }
 }

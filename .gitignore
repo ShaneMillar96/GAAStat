@@ -63,4 +63,4 @@ Desktop.ini
 
 # Temporary files
 *.tmp
-*.temp
+*.temp.mcp.json
