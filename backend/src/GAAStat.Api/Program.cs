@@ -22,6 +22,9 @@ builder.Services.AddScoped<IGAAStatDbContext>(provider =>
 // Register ETL services (match and player statistics)
 builder.Services.AddGAAStatisticsEtlServices();
 
+// Register dashboard services (GAAS-10)
+builder.Services.AddDashboardServices();
+
 // Configure file upload limits
 builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
 {

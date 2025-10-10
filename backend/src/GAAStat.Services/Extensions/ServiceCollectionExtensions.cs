@@ -1,3 +1,6 @@
+using GAAStat.Services.Dashboard.Interfaces;
+using GAAStat.Services.Dashboard.Services;
+using GAAStat.Services.Dashboard.Utilities;
 using GAAStat.Services.ETL;
 using GAAStat.Services.ETL.Interfaces;
 using GAAStat.Services.ETL.Loaders;
@@ -40,6 +43,25 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ExcelKpiDataReader>();
         services.AddScoped<KpiDataTransformer>();
         services.AddScoped<KpiDataLoader>();
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers dashboard services with dependency injection (GAAS-10)
+    /// </summary>
+    /// <param name="services">Service collection</param>
+    /// <returns>Service collection for chaining</returns>
+    public static IServiceCollection AddDashboardServices(this IServiceCollection services)
+    {
+        // Register dashboard service
+        services.AddScoped<IDashboardService, DashboardService>();
+
+        // Register utilities
+        services.AddSingleton<ScoreCalculator>();
+
+        // Register memory cache (if not already registered)
+        services.AddMemoryCache();
 
         return services;
     }

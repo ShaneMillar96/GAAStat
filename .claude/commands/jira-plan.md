@@ -135,6 +135,22 @@ echo "Planning Session: $(date)" > planning_session.log
 echo "Ticket: JIRA-$ARGUMENTS" >> planning_session.log
 ```
 
+**IMPORTANT:** All planning artifacts MUST be created in `.work/JIRA-$ARGUMENTS/` directory.
+
+**File Locations:**
+- `.work/JIRA-$ARGUMENTS/implementation.md` - Master implementation plan
+- `.work/JIRA-$ARGUMENTS/scope_analysis.md` - Planner selection rationale
+- `.work/JIRA-$ARGUMENTS/SCHEMA_CHANGES.md` - Database specialist output
+- `.work/JIRA-$ARGUMENTS/ETL_CHANGES.md` - ETL specialist output
+- `.work/JIRA-$ARGUMENTS/SERVICES_CHANGES.md` - Service specialist output
+- `.work/JIRA-$ARGUMENTS/API_CHANGES.md` - API specialist output
+- `.work/JIRA-$ARGUMENTS/UI_CHANGES.md` - UI specialist output
+- `.work/JIRA-$ARGUMENTS/confidence_scores.json` - Planning confidence metrics
+- `.work/JIRA-$ARGUMENTS/dependencies.md` - Cross-component dependencies
+- `.work/JIRA-$ARGUMENTS/risks.md` - Risk register and mitigations
+
+**When deploying Task agents**, explicitly instruct them to create all output files in `.work/JIRA-$ARGUMENTS/` directory.
+
 ### Step 2: Gather Context & Requirements
 I will:
 1. **Fetch JIRA Ticket Details** using MCP Atlassian integration
@@ -299,15 +315,18 @@ CONTEXT:
 - Feature requirements: [from JIRA ticket]
 - Performance requirements: [extract from requirements]
 
-OUTPUT: SCHEMA_CHANGES.md with:
-1. ERD diagrams in markdown
-2. Complete migration scripts with rollback
-3. Index strategy with performance analysis
-4. Data validation rules and constraints
-5. Sample queries demonstrating usage
-6. Confidence rating (1-10) with justification
+OUTPUT: Create all files in .work/JIRA-{TICKET-ID}/ directory:
+- SCHEMA_CHANGES.md with:
+  1. ERD diagrams in markdown
+  2. Complete migration scripts with rollback
+  3. Index strategy with performance analysis
+  4. Data validation rules and constraints
+  5. Sample queries demonstrating usage
+  6. Confidence rating (1-10) with justification
 
 COORDINATION: Share outputs with service and API planners in real-time
+
+**CRITICAL:** All output files MUST be created in .work/JIRA-{TICKET-ID}/ directory.
 ```
 
 #### ETL Specialist Agent (Priority: 1)
@@ -330,15 +349,18 @@ CONTEXT:
 - Data warehouse schema: [examine DW structure]
 - New data requirements: [from feature spec]
 
-OUTPUT: ETL_CHANGES.md with:
-1. Data flow diagrams
-2. Transformation logic with examples
-3. Error handling procedures
-4. Performance benchmarks and optimization
-5. Data validation checkpoints
-6. Confidence rating (1-10) with risk assessment
+OUTPUT: Create all files in .work/JIRA-{TICKET-ID}/ directory:
+- ETL_CHANGES.md with:
+  1. Data flow diagrams
+  2. Transformation logic with examples
+  3. Error handling procedures
+  4. Performance benchmarks and optimization
+  5. Data validation checkpoints
+  6. Confidence rating (1-10) with risk assessment
 
 COORDINATION: Monitor database planner outputs for schema alignment
+
+**CRITICAL:** All output files MUST be created in .work/JIRA-{TICKET-ID}/ directory.
 ```
 
 #### Service Specialist Agent (Priority: 2)
@@ -361,15 +383,18 @@ CONTEXT:
 - Business requirements: [from JIRA analysis]
 - Database changes: [monitor SCHEMA_CHANGES.md updates]
 
-OUTPUT: SERVICES_CHANGES.md with:
-1. Service layer architecture diagrams
-2. Interface definitions with documentation
-3. Business rule implementations
-4. Error handling strategies
-5. Unit testing specifications
-6. Confidence rating (1-10) with complexity analysis
+OUTPUT: Create all files in .work/JIRA-{TICKET-ID}/ directory:
+- SERVICES_CHANGES.md with:
+  1. Service layer architecture diagrams
+  2. Interface definitions with documentation
+  3. Business rule implementations
+  4. Error handling strategies
+  5. Unit testing specifications
+  6. Confidence rating (1-10) with complexity analysis
 
 COORDINATION: Bridge database/ETL outputs with API requirements in real-time
+
+**CRITICAL:** All output files MUST be created in .work/JIRA-{TICKET-ID}/ directory.
 ```
 
 #### API Specialist Agent (Priority: 3)
@@ -392,15 +417,18 @@ CONTEXT:
 - Service layer design: [monitor SERVICES_CHANGES.md updates]
 - Frontend requirements: [analyze React components]
 
-OUTPUT: API_CHANGES.md with:
-1. Complete OpenAPI specifications
-2. Request/response examples with validation
-3. Error response formats and codes
-4. Security considerations and auth flows
-5. Performance optimization strategies
-6. Confidence rating (1-10) with security assessment
+OUTPUT: Create all files in .work/JIRA-{TICKET-ID}/ directory:
+- API_CHANGES.md with:
+  1. Complete OpenAPI specifications
+  2. Request/response examples with validation
+  3. Error response formats and codes
+  4. Security considerations and auth flows
+  5. Performance optimization strategies
+  6. Confidence rating (1-10) with security assessment
 
 COORDINATION: Wait for service specifications before finalizing API contracts
+
+**CRITICAL:** All output files MUST be created in .work/JIRA-{TICKET-ID}/ directory.
 ```
 
 #### UI Specialist Agent (Priority: 4)
@@ -425,19 +453,22 @@ CONTEXT:
 - API specifications: [monitor API_CHANGES.md updates]
 - Design requirements: [from JIRA analysis]
 
-OUTPUT: UI_CHANGES.md with:
-1. Component hierarchy and architecture diagrams
-2. TypeScript interfaces for props and state
-3. State management strategy (local vs server state)
-4. Routing configuration
-5. API integration patterns
-6. Accessibility implementation plan
-7. Performance optimization strategy
-8. Testing specifications (component, integration, a11y)
-9. Responsive design breakpoints
-10. Confidence rating (1-10) with risk assessment
+OUTPUT: Create all files in .work/JIRA-{TICKET-ID}/ directory:
+- UI_CHANGES.md with:
+  1. Component hierarchy and architecture diagrams
+  2. TypeScript interfaces for props and state
+  3. State management strategy (local vs server state)
+  4. Routing configuration
+  5. API integration patterns
+  6. Accessibility implementation plan
+  7. Performance optimization strategy
+  8. Testing specifications (component, integration, a11y)
+  9. Responsive design breakpoints
+  10. Confidence rating (1-10) with risk assessment
 
 COORDINATION: Wait for API specifications before finalizing data integration patterns
+
+**CRITICAL:** All output files MUST be created in .work/JIRA-{TICKET-ID}/ directory.
 ```
 
 ### Step 4: Confidence Assessment & Iteration
