@@ -64,3 +64,6 @@ Desktop.ini
 # Temporary files
 *.tmp
 *.temp.mcp.json
+
+# MCP Configuration (contains API keys)
+.mcp.json
