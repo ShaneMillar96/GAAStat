@@ -57,6 +57,12 @@ I coordinate with domain specialists who are masters in their fields:
 - **Security best practices**
 - **Performance optimization**
 
+#### 🎨 UI Planning Specialist
+- **React/TypeScript expertise**
+- **Component architecture design**
+- **Accessibility (WCAG 2.1 AA)**
+- **Performance optimization**
+
 ### Phase 3: Iterative Confidence Assessment
 Each specialist provides:
 - **Confidence Rating** (1-10 scale)
@@ -85,6 +91,7 @@ Creating planning workspace at: `.work/JIRA-$ARGUMENTS/`
 ├── ETL_CHANGES.md             # ETL specialist output (if deployed)
 ├── SERVICES_CHANGES.md        # Service specialist output (if deployed)
 ├── API_CHANGES.md             # API specialist output (if deployed)
+├── UI_CHANGES.md              # UI specialist output (if deployed)
 ├── confidence_scores.json     # Planning confidence metrics (deployed planners only)
 ├── dependencies.md            # Cross-component dependencies (if multiple planners)
 ├── risks.md                   # Risk register and mitigations (deployed planners only)
@@ -143,16 +150,18 @@ I will:
 
 I examine the JIRA ticket for these indicators:
 
-| Requirement Type | Database | ETL | Service | API | Indicators |
-|-----------------|----------|-----|---------|-----|------------|
-| **Schema Changes** | ✅ | - | - | - | "add table", "new column", "index", "migration", "constraint" |
-| **ETL Pipeline** | ✅* | ✅ | - | - | "data import", "excel processing", "ETL job", "data transformation" |
-| **Business Logic** | ✅* | - | ✅ | - | "calculation", "validation rule", "business process", "service layer" |
-| **New API Endpoint** | ✅* | - | ✅ | ✅ | "endpoint", "REST API", "controller", "HTTP", "request/response" |
-| **Data Model Only** | ✅ | - | - | - | "entity", "model", "EF Core", "DbContext" (no service/API mentions) |
-| **Service Refactor** | - | - | ✅ | - | "refactor service", "business logic change" (no schema/API changes) |
-| **API Contract Change** | - | - | ✅* | ✅ | "update endpoint", "change response", "API versioning" |
-| **Performance Optimization** | ✅* | ✅* | ✅* | ✅* | Analyze which layer needs optimization |
+| Requirement Type | Database | ETL | Service | API | UI | Indicators |
+|-----------------|----------|-----|---------|-----|-----|------------|
+| **Schema Changes** | ✅ | - | - | - | - | "add table", "new column", "index", "migration", "constraint" |
+| **ETL Pipeline** | ✅* | ✅ | - | - | - | "data import", "excel processing", "ETL job", "data transformation" |
+| **Business Logic** | ✅* | - | ✅ | - | - | "calculation", "validation rule", "business process", "service layer" |
+| **New API Endpoint** | ✅* | - | ✅ | ✅ | - | "endpoint", "REST API", "controller", "HTTP", "request/response" |
+| **Data Model Only** | ✅ | - | - | - | - | "entity", "model", "EF Core", "DbContext" (no service/API mentions) |
+| **Service Refactor** | - | - | ✅ | - | - | "refactor service", "business logic change" (no schema/API changes) |
+| **API Contract Change** | - | - | ✅* | ✅ | - | "update endpoint", "change response", "API versioning" |
+| **New UI Component** | ✅* | - | ✅* | ✅* | ✅ | "component", "page", "screen", "UI", "frontend", "React" |
+| **UI Enhancement** | - | - | - | ✅* | ✅ | "styling", "layout", "UX", "responsive", "accessibility" |
+| **Performance Optimization** | ✅* | ✅* | ✅* | ✅* | ✅* | Analyze which layer needs optimization |
 
 **Legend**: ✅ = Required, ✅* = Conditionally Required, - = Not Needed
 
@@ -205,6 +214,20 @@ Deploy: Service + API Planners
 Rationale: Service layer pagination + API response changes (no schema)
 ```
 
+**Scenario 6: New UI Page**
+```
+Ticket: "Create player statistics dashboard page"
+Deploy: Database + Service + API + UI Planners
+Rationale: Full stack - may need schema + business logic + API endpoints + React components
+```
+
+**Scenario 7: UI Enhancement Only**
+```
+Ticket: "Improve mobile responsiveness of match list page"
+Deploy: UI Planner ONLY
+Rationale: Pure frontend styling/layout changes, no backend impact
+```
+
 #### 🚦 Deployment Decision Process
 
 ```markdown
@@ -224,6 +247,12 @@ IF (requires business logic OR calculations OR validation rules)
 IF (requires new/modified endpoints OR API contract changes)
   → Deploy API Planner
   → Deploy Service Planner (always needed for API)
+  → Deploy Database Planner (if new data needed)
+
+IF (requires UI components OR pages OR frontend changes)
+  → Deploy UI Planner
+  → Deploy API Planner (if new data needed)
+  → Deploy Service Planner (if API deployed)
   → Deploy Database Planner (if new data needed)
 ```
 
@@ -246,6 +275,8 @@ Database Only:    [Database Planner] → Complete
 ETL Pipeline:     [Database Planner] + [ETL Planner] → Parallel execution
 New API:          [Database] + [Service] + [API] → Coordinated parallel
 Service Refactor: [Service Planner] → Complete
+UI Only:          [UI Planner] → Complete
+Full Stack:       [Database] + [Service] + [API] + [UI] → Coordinated parallel
 ```
 
 #### Database Specialist Agent (Priority: 1)
@@ -370,6 +401,43 @@ OUTPUT: API_CHANGES.md with:
 6. Confidence rating (1-10) with security assessment
 
 COORDINATION: Wait for service specifications before finalizing API contracts
+```
+
+#### UI Specialist Agent (Priority: 4)
+```prompt
+You are a React/TypeScript UI expert specializing in accessible, performant web applications.
+
+MISSION: Design comprehensive UI layer specification for the new feature.
+
+EXECUTION MODE: **PARALLEL** - Integrates with API layer outputs
+
+EXPERTISE:
+- React 19 patterns and modern hooks
+- TypeScript strict mode and type safety
+- Component architecture and design systems
+- Tailwind CSS and responsive design
+- Accessibility (WCAG 2.1 AA compliance)
+- Performance optimization (code splitting, lazy loading)
+- State management (Context, TanStack Query)
+
+CONTEXT:
+- Current UI patterns: [examine existing React components]
+- API specifications: [monitor API_CHANGES.md updates]
+- Design requirements: [from JIRA analysis]
+
+OUTPUT: UI_CHANGES.md with:
+1. Component hierarchy and architecture diagrams
+2. TypeScript interfaces for props and state
+3. State management strategy (local vs server state)
+4. Routing configuration
+5. API integration patterns
+6. Accessibility implementation plan
+7. Performance optimization strategy
+8. Testing specifications (component, integration, a11y)
+9. Responsive design breakpoints
+10. Confidence rating (1-10) with risk assessment
+
+COORDINATION: Wait for API specifications before finalizing data integration patterns
 ```
 
 ### Step 4: Confidence Assessment & Iteration
